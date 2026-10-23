@@ -27,6 +27,14 @@ html, body {
 
 #ui-root > * { pointer-events: auto; }
 
+/*
+ * The heads-up display covers the whole viewport but must never take a click:
+ * the canvas needs them to acquire pointer lock. The rule above is written with
+ * an id, so a plain `.hud` selector loses to it on specificity and the overlay
+ * silently swallows every click. Match its specificity here.
+ */
+#ui-root > .hud { pointer-events: none; }
+
 /* ---------------------------------------------------------------------- */
 /* Shared palette                                                          */
 /* ---------------------------------------------------------------------- */
