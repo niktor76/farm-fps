@@ -1,6 +1,6 @@
 import {
   MATCH,
-  CAMERA,
+  INPUT,
   DIFFICULTIES,
   FEEL_PRESETS,
   DEFAULT_FEEL,
@@ -18,9 +18,10 @@ const FEEL_DESCRIPTIONS = {
 
 /**
  * Start screen: play button, bot count slider, difficulty, feel preset, and
- * settings for mouse sensitivity and volume. Settings persist in localStorage.
+ * settings for input device, look sensitivity, keyboard turn speed and volume.
+ * Settings persist in localStorage.
  *
- * Owned by PH-4-ui-shell, completed by PH-11-menu.
+ * Owned by PH-4-ui-shell, completed by PH-11-menu, extended by PH-13-trackpad.
  */
 export class Menu {
   /**
@@ -186,18 +187,34 @@ export class Menu {
     heading.textContent = 'Settings';
     section.appendChild(heading);
 
+    section.appendChild(this.buildDeviceModeRow());
+
+    const device = INPUT.devices[this.settings.deviceMode];
+    this.sensitivityControl = this.buildRangeRow({
+      label: 'Look sensitivity',
+      minimum: device.minimumSensitivity,
+      maximum: device.maximumSensitivity,
+      step: sensitivityStep(device),
+      value: this.settings.sensitivity,
+      formatValue: (value) => value.toFixed(4),
+      onChange: (value) => {
+        this.settings.sensitivity = value;
+      }
+    });
+    section.appendChild(this.sensitivityControl.element);
+
     section.appendChild(
       this.buildRangeRow({
-        label: 'Mouse sensitivity',
-        minimum: CAMERA.minimumSensitivity,
-        maximum: CAMERA.maximumSensitivity,
-        step: (CAMERA.maximumSensitivity - CAMERA.minimumSensitivity) / 100,
-        value: this.settings.sensitivity,
-        formatValue: (value) => value.toFixed(4),
+        label: 'Keyboard turn speed',
+        minimum: INPUT.keyboardLook.minimumYawDegreesPerSecond,
+        maximum: INPUT.keyboardLook.maximumYawDegreesPerSecond,
+        step: INPUT.keyboardLook.stepDegreesPerSecond,
+        value: this.settings.keyboardTurnDegreesPerSecond,
+        formatValue: (value) => `${Math.round(value)}°/s`,
         onChange: (value) => {
-          this.settings.sensitivity = value;
+          this.settings.keyboardTurnDegreesPerSecond = value;
         }
-      })
+      }).element
     );
 
     section.appendChild(
@@ -211,7 +228,7 @@ export class Menu {
         onChange: (value) => {
           this.settings.volume = value;
         }
-      })
+      }).element
     );
 
     const checkboxRow = document.createElement('label');
@@ -233,6 +250,55 @@ export class Menu {
     section.appendChild(checkboxRow);
 
     return section;
+  }
+
+  /**
+   * Picking the device swaps the sensitivity range as well as the value: a
+   * sensible mouse number is a useless trackpad number.
+   */
+  buildDeviceModeRow() {
+    const row = document.createElement('div');
+    row.className = 'menu-slider-row';
+
+    const text = document.createElement('label');
+    text.className = 'menu-slider-label';
+    text.textContent = 'Input device';
+    row.appendChild(text);
+
+    const group = document.createElement('div');
+    group.className = 'menu-segmented-group';
+
+    for (const deviceKey of Object.keys(INPUT.devices)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'menu-segmented-button';
+      button.textContent = INPUT.devices[deviceKey].label;
+      button.dataset.key = deviceKey;
+      button.classList.toggle('is-selected', deviceKey === this.settings.deviceMode);
+
+      button.addEventListener('click', () => {
+        const device = INPUT.devices[deviceKey];
+        this.settings.deviceMode = deviceKey;
+        this.settings.sensitivity = device.defaultSensitivity;
+
+        this.sensitivityControl.setRange({
+          minimum: device.minimumSensitivity,
+          maximum: device.maximumSensitivity,
+          step: sensitivityStep(device),
+          value: device.defaultSensitivity
+        });
+
+        for (const sibling of group.children) {
+          sibling.classList.toggle('is-selected', sibling.dataset.key === deviceKey);
+        }
+        this.persist();
+      });
+
+      group.appendChild(button);
+    }
+
+    row.appendChild(group);
+    return row;
   }
 
   buildRangeRow({ label, minimum, maximum, step, value, formatValue, onChange }) {
@@ -265,7 +331,17 @@ export class Menu {
     row.appendChild(text);
     row.appendChild(slider);
     row.appendChild(valueDisplay);
-    return row;
+
+    return {
+      element: row,
+      setRange: ({ minimum: newMinimum, maximum: newMaximum, step: newStep, value: newValue }) => {
+        slider.min = String(newMinimum);
+        slider.max = String(newMaximum);
+        slider.step = String(newStep);
+        slider.value = String(newValue);
+        valueDisplay.textContent = formatValue(newValue);
+      }
+    };
   }
 
   buildControlsSection() {
@@ -282,9 +358,11 @@ export class Menu {
 
     const entries = [
       ['W A S D', 'Move'],
-      ['Shift', 'Sprint'],
+      ['Arrows / Q E', 'Turn and look'],
+      ['Shift', 'Sprint, and turn faster'],
       ['Space', 'Jump'],
       ['Control / C', 'Crouch'],
+      ['Mouse / F', 'Fire'],
       ['1-5 / Wheel', 'Switch weapon'],
       ['R', 'Reload'],
       ['Tab', 'Scoreboard']
@@ -337,35 +415,40 @@ export class Menu {
   }
 }
 
-/** @returns {MatchSettings} */
-function loadSettings() {
-  const defaults = {
-    botCount: MATCH.defaultBotCount,
-    difficultyKey: DEFAULT_DIFFICULTY,
-    feelKey: DEFAULT_FEEL,
-    sensitivity: CAMERA.defaultSensitivity,
-    volume: AUDIO.defaultVolume,
-    showNametags: true
-  };
+function sensitivityStep(device) {
+  return (device.maximumSensitivity - device.minimumSensitivity) / INPUT.sensitivitySliderSteps;
+}
 
+function readStoredSettings() {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return defaults;
+  if (!stored) return {};
 
   let parsed;
   try {
     parsed = JSON.parse(stored);
   } catch {
-    return defaults;
+    return {};
   }
-  if (typeof parsed !== 'object' || parsed === null) return defaults;
+  return typeof parsed === 'object' && parsed !== null ? parsed : {};
+}
+
+/** @returns {MatchSettings} */
+function loadSettings() {
+  const parsed = readStoredSettings();
+  const deviceMode = INPUT.devices[parsed.deviceMode] ? parsed.deviceMode : INPUT.defaultDeviceMode;
+  const device = INPUT.devices[deviceMode];
 
   return {
-    botCount: Number.isFinite(parsed.botCount) ? parsed.botCount : defaults.botCount,
-    difficultyKey: DIFFICULTIES[parsed.difficultyKey] ? parsed.difficultyKey : defaults.difficultyKey,
-    feelKey: FEEL_PRESETS[parsed.feelKey] ? parsed.feelKey : defaults.feelKey,
-    sensitivity: Number.isFinite(parsed.sensitivity) ? parsed.sensitivity : defaults.sensitivity,
-    volume: Number.isFinite(parsed.volume) ? parsed.volume : defaults.volume,
-    showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : defaults.showNametags
+    botCount: Number.isFinite(parsed.botCount) ? parsed.botCount : MATCH.defaultBotCount,
+    difficultyKey: DIFFICULTIES[parsed.difficultyKey] ? parsed.difficultyKey : DEFAULT_DIFFICULTY,
+    feelKey: FEEL_PRESETS[parsed.feelKey] ? parsed.feelKey : DEFAULT_FEEL,
+    deviceMode,
+    sensitivity: Number.isFinite(parsed.sensitivity) ? parsed.sensitivity : device.defaultSensitivity,
+    keyboardTurnDegreesPerSecond: Number.isFinite(parsed.keyboardTurnDegreesPerSecond)
+      ? parsed.keyboardTurnDegreesPerSecond
+      : INPUT.keyboardLook.yawDegreesPerSecond,
+    volume: Number.isFinite(parsed.volume) ? parsed.volume : AUDIO.defaultVolume,
+    showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : true
   };
 }
 
@@ -374,7 +457,9 @@ function loadSettings() {
  *   botCount: number,
  *   difficultyKey: 'easy'|'medium'|'hard',
  *   feelKey: 'arcade'|'balanced'|'tactical',
+ *   deviceMode: 'mouse'|'trackpad',
  *   sensitivity: number,
+ *   keyboardTurnDegreesPerSecond: number,
  *   volume: number,
  *   showNametags: boolean
  * }} MatchSettings

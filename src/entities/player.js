@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Fighter, createIntent } from './fighter.js';
-import { CAMERA } from '../config/tunables.js';
+import { CAMERA, INPUT } from '../config/tunables.js';
 
 const scratchLookDelta = new THREE.Vector2();
 const scratchEyePosition = new THREE.Vector3();
@@ -33,6 +33,10 @@ export class Player extends Fighter {
     this.camera = camera;
     this.input = input;
     this.sensitivity = CAMERA.defaultSensitivity;
+    this.keyboardYawRadiansPerSecond = THREE.MathUtils.degToRad(INPUT.keyboardLook.yawDegreesPerSecond);
+    this.keyboardPitchRadiansPerSecond = THREE.MathUtils.degToRad(
+      INPUT.keyboardLook.pitchDegreesPerSecond
+    );
 
     this.intent = createIntent();
 
@@ -53,10 +57,32 @@ export class Player extends Fighter {
     this.yaw = ((((this.yaw + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
   }
 
+  /** @param {number} degreesPerSecond */
+  setKeyboardTurnSpeed(degreesPerSecond) {
+    this.keyboardYawRadiansPerSecond = THREE.MathUtils.degToRad(degreesPerSecond);
+  }
+
+  /**
+   * Arrow keys and Q/E, composing additively with the pointer look above.
+   * Sprint doubles as the fast-turn modifier.
+   */
+  applyKeyboardLook(deltaSeconds) {
+    const turn = (this.input.isDown('turnRight') ? 1 : 0) - (this.input.isDown('turnLeft') ? 1 : 0);
+    const tilt = (this.input.isDown('lookDown') ? 1 : 0) - (this.input.isDown('lookUp') ? 1 : 0);
+    const multiplier = this.input.isDown('sprint') ? INPUT.keyboardLook.fastMultiplier : 1;
+
+    this.applyLook(
+      turn * this.keyboardYawRadiansPerSecond * multiplier * deltaSeconds,
+      tilt * this.keyboardPitchRadiansPerSecond * multiplier * deltaSeconds,
+      1
+    );
+  }
+
   /** Reads input, builds the movement intent, and steps the fighter. */
   update(deltaSeconds, collisionWorld) {
-    this.input.consumeLookDelta(scratchLookDelta);
+    this.input.consumeLookDelta(scratchLookDelta, deltaSeconds);
     this.applyLook(scratchLookDelta.x, scratchLookDelta.y, this.sensitivity);
+    this.applyKeyboardLook(deltaSeconds);
 
     const intent = this.intent;
     intent.forward = (this.input.isDown('forward') ? 1 : 0) - (this.input.isDown('back') ? 1 : 0);

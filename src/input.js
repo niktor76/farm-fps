@@ -1,12 +1,14 @@
+import { INPUT } from './config/tunables.js';
+
 /**
- * Keyboard and mouse input behind pointer lock.
+ * Keyboard and pointer input behind pointer lock.
  *
- * Pointer lock requests `unadjustedMovement` so operating system mouse
- * acceleration does not distort aim, falling back when the browser rejects the
- * option. Chrome refuses an automatic re-lock immediately after the user
- * presses Escape, so re-locking requires a fresh click.
+ * The device mode decides how a pointer delta is treated. Browsers cannot tell
+ * a trackpad from a mouse under pointer lock, so the mode is a player setting
+ * rather than a detection. Chrome refuses an automatic re-lock immediately
+ * after the user presses Escape, so re-locking requires a fresh click.
  *
- * Owned by PH-2-player.
+ * Owned by PH-2-player, extended by PH-13-trackpad.
  */
 
 const ACTION_BY_KEY_CODE = {
@@ -21,7 +23,14 @@ const ACTION_BY_KEY_CODE = {
   ControlRight: 'crouch',
   KeyC: 'crouch',
   KeyR: 'reload',
-  Tab: 'scoreboard'
+  KeyF: 'fire',
+  Tab: 'scoreboard',
+  ArrowLeft: 'turnLeft',
+  ArrowRight: 'turnRight',
+  ArrowUp: 'lookUp',
+  ArrowDown: 'lookDown',
+  KeyQ: 'turnLeft',
+  KeyE: 'turnRight'
 };
 
 const WEAPON_SLOT_BY_KEY_CODE = {
@@ -32,17 +41,29 @@ const WEAPON_SLOT_BY_KEY_CODE = {
   Digit5: 4
 };
 
-const SWALLOWED_KEY_CODES = new Set(['Space', 'Tab']);
+const SWALLOWED_KEY_CODES = new Set([
+  'Space',
+  'Tab',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown'
+]);
 
 export class Input {
   /** @param {HTMLCanvasElement} canvas */
   constructor(canvas) {
     this.canvas = canvas;
 
+    this.deviceMode = INPUT.defaultDeviceMode;
+    this.deviceProfile = INPUT.devices[this.deviceMode];
+
     this.downActions = new Set();
     this.pressedActions = new Set();
     this.lookDeltaX = 0;
     this.lookDeltaY = 0;
+    this.smoothedLookX = 0;
+    this.smoothedLookY = 0;
     this.weaponSlotRequest = null;
     this.wheelDirection = 0;
 
@@ -78,8 +99,8 @@ export class Input {
 
     this.onMouseMove = (event) => {
       if (!this.locked) return;
-      this.lookDeltaX += event.movementX;
-      this.lookDeltaY += event.movementY;
+      this.lookDeltaX += this.accelerate(event.movementX);
+      this.lookDeltaY += this.accelerate(event.movementY);
     };
 
     this.onWheel = (event) => {
@@ -89,8 +110,7 @@ export class Input {
     this.onPointerLockChange = () => {
       if (this.locked) return;
       this.downActions.clear();
-      this.lookDeltaX = 0;
-      this.lookDeltaY = 0;
+      this.clearLookState();
     };
 
     this.listeners = [
@@ -108,7 +128,38 @@ export class Input {
     }
   }
 
+  /** @param {'mouse'|'trackpad'} mode */
+  setDeviceMode(mode) {
+    const profile = INPUT.devices[mode];
+    if (!profile) throw new Error(`unknown input device mode: ${mode}`);
+
+    this.deviceMode = mode;
+    this.deviceProfile = profile;
+    this.clearLookState();
+  }
+
+  clearLookState() {
+    this.lookDeltaX = 0;
+    this.lookDeltaY = 0;
+    this.smoothedLookX = 0;
+    this.smoothedLookY = 0;
+  }
+
+  /** In-engine acceleration curve, an identity pass when the factor is zero. */
+  accelerate(delta) {
+    const magnitude = Math.abs(delta);
+    const factor = this.deviceProfile.accelerationExponentFactor;
+    return Math.sign(delta) * (magnitude + factor * magnitude * magnitude);
+  }
+
   requestLock() {
+    // A trackpad needs the operating system acceleration kept: it is the
+    // mechanism that turns a short physical swipe into a large view turn.
+    if (!this.deviceProfile.requestUnadjustedMovement) {
+      this.canvas.requestPointerLock();
+      return;
+    }
+
     // The only defensive block in the project: `unadjustedMovement` is not
     // universally supported and a browser may reject it as a promise, throw
     // synchronously, or ignore the argument and return undefined.
@@ -137,15 +188,24 @@ export class Input {
     return document.pointerLockElement === this.canvas;
   }
 
-  /** Accumulated mouse movement since the last call, in CSS pixels. */
-  consumeLookDelta(target) {
-    target.set(this.lookDeltaX, this.lookDeltaY);
+  /**
+   * Pointer movement since the last call, already shaped for the active device:
+   * accelerated on arrival, exponentially smoothed here, vertical axis scaled.
+   */
+  consumeLookDelta(target, deltaSeconds) {
+    const rate = this.deviceProfile.smoothingRatePerSecond;
+    const blend = rate > 0 ? 1 - Math.exp(-rate * deltaSeconds) : 1;
+
+    this.smoothedLookX += (this.lookDeltaX - this.smoothedLookX) * blend;
+    this.smoothedLookY += (this.lookDeltaY - this.smoothedLookY) * blend;
     this.lookDeltaX = 0;
     this.lookDeltaY = 0;
+
+    target.set(this.smoothedLookX, this.smoothedLookY * this.deviceProfile.verticalMultiplier);
     return target;
   }
 
-  /** @param {'forward'|'back'|'left'|'right'|'jump'|'sprint'|'crouch'|'fire'|'reload'|'scoreboard'} action */
+  /** @param {'forward'|'back'|'left'|'right'|'jump'|'sprint'|'crouch'|'fire'|'reload'|'scoreboard'|'turnLeft'|'turnRight'|'lookUp'|'lookDown'} action */
   isDown(action) {
     return this.downActions.has(action);
   }

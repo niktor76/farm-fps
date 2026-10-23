@@ -259,3 +259,49 @@ export const AUDIO = {
   maximumHearingDistance: 60,
   voicesPerSound: 6
 };
+
+/**
+ * Look input, per pointing device.
+ *
+ * A trackpad and a mouse need different handling and the browser cannot tell
+ * them apart under pointer lock, so the device is a player setting. The mouse
+ * profile reuses the CAMERA sensitivity figures so both stay one value.
+ *
+ * `accelerationExponentFactor` feeds the in-engine curve
+ * `|delta| + factor * |delta|^2`; the trackpad default is tuned so a brisk
+ * full-width swipe across a MacBook trackpad turns about 150 degrees.
+ */
+export const INPUT = {
+  defaultDeviceMode: 'mouse',
+  sensitivitySliderSteps: 100,
+  devices: {
+    mouse: {
+      label: 'Mouse',
+      requestUnadjustedMovement: true,
+      defaultSensitivity: CAMERA.defaultSensitivity,
+      minimumSensitivity: CAMERA.minimumSensitivity,
+      maximumSensitivity: CAMERA.maximumSensitivity,
+      verticalMultiplier: 1,
+      accelerationExponentFactor: 0,
+      smoothingRatePerSecond: 0
+    },
+    trackpad: {
+      label: 'Trackpad',
+      requestUnadjustedMovement: false,
+      defaultSensitivity: 0.0026,
+      minimumSensitivity: 0.0005,
+      maximumSensitivity: 0.0078,
+      verticalMultiplier: 0.65,
+      accelerationExponentFactor: 0.0055,
+      smoothingRatePerSecond: 30
+    }
+  },
+  keyboardLook: {
+    yawDegreesPerSecond: 150,
+    pitchDegreesPerSecond: 90,
+    fastMultiplier: 1.5,
+    minimumYawDegreesPerSecond: 60,
+    maximumYawDegreesPerSecond: 300,
+    stepDegreesPerSecond: 5
+  }
+};

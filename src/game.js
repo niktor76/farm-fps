@@ -4,17 +4,21 @@ import { DebugStats } from './core/debugStats.js';
 import { Random } from './core/rng.js';
 import { CollisionWorld } from './world/collision.js';
 import { buildFarm } from './world/map.js';
+import { generateSpawnPoints, chooseSpawnPoint } from './world/spawns.js';
 import { Player } from './entities/player.js';
 import { Input } from './input.js';
 import { Hud } from './ui/hud.js';
-import { CAMERA, MATCH, FIGHTER, WORLD } from './config/tunables.js';
+import { WeaponSystem } from './weapons/weapons.js';
+import { EffectSystem } from './weapons/effects.js';
+import { ViewModel } from './weapons/viewmodel.js';
+import { CAMERA, MATCH } from './config/tunables.js';
 
 /**
  * One match: owns the scene, the fighters, the fixed-timestep loop, the match
  * timer, scoring and respawning.
  *
- * M1 scope: one human fighter walking the farm. Weapons arrive in M2, bots in
- * M3, scoring and the results flow in M4.
+ * M2 scope: one human fighter with working weapons. Bots arrive in M3, the
+ * results flow in M4.
  */
 export class Game {
   constructor({ canvas, uiRoot, settings, audio, onMatchEnd }) {
@@ -38,6 +42,9 @@ export class Game {
       CAMERA.farPlane
     );
     this.camera.rotation.order = 'YXZ';
+    // The view model is parented to the camera, and three.js does not render
+    // children of a camera that sits outside the scene graph.
+    this.scene.add(this.camera);
 
     this.random = new Random();
     this.collisionWorld = new CollisionWorld();
@@ -46,9 +53,13 @@ export class Game {
       collisionWorld: this.collisionWorld,
       random: this.random
     });
+    this.spawnPoints = generateSpawnPoints(this.collisionWorld, this.random);
 
     this.input = new Input(canvas);
+    this.input.setDeviceMode(settings.deviceMode);
     this.hud = new Hud(uiRoot);
+    this.effects = new EffectSystem(this.scene, this.farm.materials);
+    this.viewModel = new ViewModel(this.camera, this.farm.materials);
 
     this.player = new Player({
       id: 0,
@@ -58,45 +69,41 @@ export class Game {
       camera: this.camera,
       input: this.input
     });
-    this.player.respawnAt(this.findClearPosition(), 0);
+
+    this.player.sensitivity = settings.sensitivity;
+    this.player.setKeyboardTurnSpeed(settings.keyboardTurnDegreesPerSecond);
 
     this.fighters = [this.player];
-    this.stats = new DebugStats();
 
+    this.weapons = new WeaponSystem({
+      collisionWorld: this.collisionWorld,
+      fighters: this.fighters,
+      effects: this.effects,
+      audio: this.audio,
+      random: this.random,
+      onDamage: (target, amount, attacker, isHeadshot) =>
+        this.applyDamage(target, amount, attacker, isHeadshot),
+      onKill: (victim, killer, weaponId) => this.registerKill(victim, killer, weaponId)
+    });
+
+    this.spawn(this.player);
+    this.viewModel.setWeapon(this.player.currentWeapon.id);
+
+    this.stats = new DebugStats();
     this.loop = new GameLoop({
       onFixedStep: (deltaSeconds) => this.fixedStep(deltaSeconds),
       onRender: (frameSeconds) => this.render(frameSeconds)
     });
 
+    this.canvas = canvas;
     this.handleResize = () => this.resize();
     this.handleCanvasClick = () => {
       this.audio.resume();
       this.input.requestLock();
     };
-    this.canvas = canvas;
     canvas.addEventListener('click', this.handleCanvasClick);
     window.addEventListener('resize', this.handleResize);
     this.resize();
-  }
-
-  /** Temporary M1 placeholder; PH-6-effects replaces this with real spawn points. */
-  findClearPosition() {
-    const limit = WORLD.playHalfExtent - 4;
-    const candidate = new THREE.Vector3();
-
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      candidate.set(this.random.range(-limit, limit), 0, this.random.range(-limit, limit));
-      const overlapping = this.collisionWorld.overlapsAt(
-        candidate.x,
-        0,
-        candidate.z,
-        FIGHTER.radius * 1.5,
-        FIGHTER.standingHeight
-      );
-      if (!overlapping) return candidate;
-    }
-
-    throw new Error('no clear spawn position found');
   }
 
   start() {
@@ -107,6 +114,42 @@ export class Game {
   stop() {
     this.loop.stop();
     this.hud.hide();
+  }
+
+  spawn(fighter) {
+    const { position, yaw } = chooseSpawnPoint(
+      this.spawnPoints,
+      this.fighters,
+      fighter,
+      this.random
+    );
+    fighter.respawnAt(position, yaw);
+    this.audio.play('spawn', fighter.isBot ? { position: fighter.position } : undefined);
+  }
+
+  applyDamage(target, amount, attacker, isHeadshot) {
+    target.applyDamage(amount, attacker.id);
+
+    if (target === this.player) {
+      this.hud.showDamage(this.bearingTo(attacker.position));
+    }
+  }
+
+  registerKill(victim, killer, weaponId) {
+    killer.kills += 1;
+    this.hud.addKillFeedEntry({
+      killerName: killer.name,
+      victimName: victim.name,
+      weaponLabel: killer.weapons.find((weapon) => weapon.id === weaponId).label,
+      involvesPlayer: killer === this.player || victim === this.player
+    });
+  }
+
+  /** Angle from where the player is looking to a world position, for the damage indicator. */
+  bearingTo(position) {
+    const offsetX = position.x - this.player.position.x;
+    const offsetZ = position.z - this.player.position.z;
+    return Math.atan2(offsetX, -offsetZ) - this.player.yaw;
   }
 
   fixedStep(deltaSeconds) {
@@ -121,11 +164,47 @@ export class Game {
       return;
     }
 
+    this.handlePlayerWeaponInput();
+
+    for (const fighter of this.fighters) {
+      this.weapons.update(fighter, deltaSeconds);
+      if (!fighter.alive && fighter.respawnTimer >= MATCH.respawnDelaySeconds) {
+        this.spawn(fighter);
+      }
+    }
+
     this.player.update(deltaSeconds, this.collisionWorld);
+    this.effects.update(deltaSeconds);
+  }
+
+  handlePlayerWeaponInput() {
+    const requestedSlot = this.input.consumeWeaponSlot();
+    if (requestedSlot !== null) this.weapons.switchTo(this.player, requestedSlot);
+
+    const wheel = this.input.consumeWheel();
+    if (wheel !== 0) this.weapons.cycle(this.player, wheel);
+
+    if (requestedSlot !== null || wheel !== 0) {
+      this.viewModel.setWeapon(this.player.currentWeapon.id);
+    }
+
+    if (this.input.wasPressed('reload')) {
+      this.weapons.tryReload(this.player);
+      if (this.player.reloading) {
+        this.viewModel.playReload(this.player.currentWeapon.reloadSeconds);
+      }
+    }
+
+    if (this.weapons.tryFire(this.player, this.input.isDown('fire'))) {
+      const weapon = this.player.currentWeapon;
+      if (weapon.kind === 'melee') this.viewModel.playMelee(weapon.swingSeconds);
+      else this.viewModel.playFire();
+    }
   }
 
   render(frameSeconds) {
     this.player.syncCamera();
+    this.viewModel.update(frameSeconds, this.player);
     this.audio.setListener(this.player.position, this.player.yaw);
 
     const weapon = this.player.currentWeapon;
