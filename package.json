@@ -1,0 +1,18 @@
+{
+  "name": "farm-fps",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser based free-for-all first person shooter set on a farm, built with Three.js.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}
