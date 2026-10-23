@@ -26,3 +26,537 @@ html, body {
 }
 
 #ui-root > * { pointer-events: auto; }
+
+/* ---------------------------------------------------------------------- */
+/* Shared palette                                                          */
+/* ---------------------------------------------------------------------- */
+
+:root {
+  --panel-background: rgba(24, 20, 15, 0.82);
+  --panel-border: rgba(241, 236, 224, 0.12);
+  --text-primary: #f1ece0;
+  --text-muted: #b9b1a0;
+  --accent: #dba13c;
+  --accent-strong: #f0b94f;
+  --health-low: #d85a3f;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Menu                                                                    */
+/* ---------------------------------------------------------------------- */
+
+.menu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  overflow-y: auto;
+  padding: 48px 24px;
+  background: radial-gradient(ellipse at center, rgba(20, 24, 16, 0.55), rgba(10, 12, 8, 0.85));
+}
+
+.menu.is-hidden {
+  display: none;
+}
+
+.menu-title {
+  text-align: center;
+}
+
+.menu-title h1 {
+  margin: 0;
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.menu-title p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.menu-section {
+  width: 100%;
+  max-width: 420px;
+  background: var(--panel-background);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.menu-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.menu-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menu-slider-label {
+  flex: 0 0 auto;
+  font-size: 14px;
+  color: var(--text-primary);
+  min-width: 130px;
+}
+
+.menu-slider {
+  flex: 1 1 auto;
+  accent-color: var(--accent);
+}
+
+.menu-slider-value {
+  flex: 0 0 auto;
+  min-width: 48px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.menu-segmented-group {
+  display: flex;
+  gap: 8px;
+}
+
+.menu-segmented-group--described {
+  flex-direction: column;
+}
+
+.menu-segmented-button {
+  flex: 1 1 0;
+  padding: 10px 12px;
+  background: rgba(241, 236, 224, 0.05);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.menu-segmented-button:hover {
+  background: rgba(241, 236, 224, 0.1);
+}
+
+.menu-segmented-button.is-selected {
+  border-color: var(--accent);
+  background: rgba(219, 161, 60, 0.18);
+}
+
+.menu-segmented-button--described {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.menu-segmented-button-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.menu-segmented-button-description {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.menu-settings .menu-slider-row {
+  margin-bottom: 12px;
+}
+
+.menu-settings .menu-slider-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.menu-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.menu-checkbox-row input {
+  accent-color: var(--accent);
+}
+
+.menu-controls-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 16px;
+  row-gap: 6px;
+  margin: 0;
+}
+
+.menu-controls-list dt {
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.menu-controls-list dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.menu-play-section {
+  margin-top: 6px;
+}
+
+.menu-play-button {
+  padding: 16px 56px;
+  background: var(--accent);
+  border: none;
+  border-radius: 9px;
+  color: #1a1308;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s ease, transform 0.05s ease;
+}
+
+.menu-play-button:hover {
+  background: var(--accent-strong);
+}
+
+.menu-play-button:active {
+  transform: scale(0.98);
+}
+
+/* ---------------------------------------------------------------------- */
+/* HUD                                                                     */
+/* ---------------------------------------------------------------------- */
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud.is-hidden {
+  display: none;
+}
+
+.hud-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+}
+
+.hud-crosshair-line {
+  position: absolute;
+  background: var(--text-primary);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.hud-crosshair-line--top,
+.hud-crosshair-line--bottom {
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  transform: translateX(-50%);
+}
+
+.hud-crosshair-line--top { top: 0; }
+.hud-crosshair-line--bottom { bottom: 0; }
+
+.hud-crosshair-line--left,
+.hud-crosshair-line--right {
+  top: 50%;
+  width: 9px;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.hud-crosshair-line--left { left: 0; }
+.hud-crosshair-line--right { right: 0; }
+
+.hud-crosshair-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.hud-hitmarker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.hud-hitmarker::before,
+.hud-hitmarker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 2px;
+  background: var(--text-primary);
+}
+
+.hud-hitmarker::before { transform: translate(-50%, -50%) rotate(45deg); }
+.hud-hitmarker::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+.hud-hitmarker.is-visible {
+  opacity: 1;
+  animation: hud-hitmarker-pulse 0.25s ease-out;
+}
+
+.hud-hitmarker.is-kill::before,
+.hud-hitmarker.is-kill::after {
+  background: var(--accent-strong);
+}
+
+@keyframes hud-hitmarker-pulse {
+  from { transform: translate(-50%, -50%) scale(1.5); }
+  to { transform: translate(-50%, -50%) scale(1); }
+}
+
+.hud-health {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel-background);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.hud-health-bar-track {
+  width: 160px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(241, 236, 224, 0.12);
+  overflow: hidden;
+}
+
+.hud-health-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s ease, background 0.15s ease;
+}
+
+.hud-health-bar-fill.is-low {
+  background: var(--health-low);
+}
+
+.hud-health-number {
+  min-width: 34px;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.hud-ammunition {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 10px 14px;
+  background: var(--panel-background);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.hud-ammunition-magazine {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.hud-ammunition-weapon {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hud-ammunition-reloading {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-strong);
+  opacity: 0;
+}
+
+.hud-ammunition-reloading.is-visible {
+  opacity: 1;
+}
+
+.hud-timer {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 18px;
+  background: var(--panel-background);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.hud-timer-clock {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.hud-timer-clock.is-urgent {
+  color: var(--health-low);
+}
+
+.hud-timer-kills {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.hud-kill-feed {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 280px;
+  align-items: flex-end;
+}
+
+.hud-kill-feed-entry {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--panel-background);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: opacity 1s ease;
+}
+
+.hud-kill-feed-entry.is-fading {
+  opacity: 0;
+}
+
+.hud-kill-feed-entry.involves-player {
+  border-color: var(--accent);
+  background: rgba(219, 161, 60, 0.18);
+}
+
+.hud-kill-feed-killer,
+.hud-kill-feed-victim {
+  font-weight: 600;
+}
+
+.hud-kill-feed-weapon {
+  color: var(--text-muted);
+}
+
+.hud-damage-vignette {
+  --hud-damage-x: 0;
+  --hud-damage-y: -1;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 70% 70% at
+      calc(50% + var(--hud-damage-x) * 35%)
+      calc(50% + var(--hud-damage-y) * 35%),
+    transparent 45%,
+    rgba(180, 20, 10, 0.5) 100%
+  );
+  opacity: 0;
+}
+
+.hud-damage-vignette.is-visible {
+  opacity: 1;
+  animation: hud-damage-fade 0.5s ease-out;
+}
+
+@keyframes hud-damage-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.hud-respawn-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(10, 8, 6, 0.65);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease;
+}
+
+.hud-respawn-overlay.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.hud-respawn-message {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--health-low);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+
+.hud-respawn-countdown {
+  font-size: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}

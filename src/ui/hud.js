@@ -1,3 +1,10 @@
+const KILL_FEED_ENTRY_LIFETIME_SECONDS = 5;
+const KILL_FEED_ENTRY_FADE_SECONDS = 1;
+const LOW_HEALTH_THRESHOLD = 35;
+const TIMER_URGENT_SECONDS = 30;
+const HITMARKER_VISIBLE_SECONDS = 0.25;
+const DAMAGE_FLASH_VISIBLE_SECONDS = 0.5;
+
 /**
  * In-match overlay: crosshair, health, ammunition, current weapon, match timer,
  * kill feed, hitmarker, damage flash and the respawn countdown.
@@ -7,15 +14,156 @@
 export class Hud {
   /** @param {HTMLElement} root */
   constructor(root) {
-    throw new Error('not implemented: PH-4-ui-shell');
+    this.container = document.createElement('div');
+    this.container.className = 'hud';
+
+    this.container.appendChild(this.buildCrosshair());
+    this.container.appendChild(this.buildHealthSection());
+    this.container.appendChild(this.buildAmmunitionSection());
+    this.container.appendChild(this.buildTimerSection());
+    this.container.appendChild(this.buildKillFeedSection());
+    this.container.appendChild(this.buildDamageVignette());
+    this.container.appendChild(this.buildRespawnOverlay());
+
+    root.appendChild(this.container);
+
+    this.killFeedEntries = [];
+    this.hitmarkerTimeoutHandle = null;
+    this.damageFlashTimeoutHandle = null;
+
+    this.previousState = {
+      health: null,
+      magazine: null,
+      magazineSize: null,
+      weaponLabel: null,
+      reloading: null,
+      secondsRemaining: null,
+      kills: null,
+      alive: null,
+      respawnSecondsRemaining: null
+    };
+  }
+
+  buildCrosshair() {
+    const crosshair = document.createElement('div');
+    crosshair.className = 'hud-crosshair';
+
+    const top = document.createElement('div');
+    top.className = 'hud-crosshair-line hud-crosshair-line--top';
+    const bottom = document.createElement('div');
+    bottom.className = 'hud-crosshair-line hud-crosshair-line--bottom';
+    const left = document.createElement('div');
+    left.className = 'hud-crosshair-line hud-crosshair-line--left';
+    const right = document.createElement('div');
+    right.className = 'hud-crosshair-line hud-crosshair-line--right';
+    const dot = document.createElement('div');
+    dot.className = 'hud-crosshair-dot';
+
+    this.hitmarkerElement = document.createElement('div');
+    this.hitmarkerElement.className = 'hud-hitmarker';
+
+    crosshair.appendChild(top);
+    crosshair.appendChild(bottom);
+    crosshair.appendChild(left);
+    crosshair.appendChild(right);
+    crosshair.appendChild(dot);
+    crosshair.appendChild(this.hitmarkerElement);
+
+    return crosshair;
+  }
+
+  buildHealthSection() {
+    const section = document.createElement('div');
+    section.className = 'hud-health';
+
+    this.healthBarFillElement = document.createElement('div');
+    this.healthBarFillElement.className = 'hud-health-bar-fill';
+
+    const barTrack = document.createElement('div');
+    barTrack.className = 'hud-health-bar-track';
+    barTrack.appendChild(this.healthBarFillElement);
+
+    this.healthNumberElement = document.createElement('div');
+    this.healthNumberElement.className = 'hud-health-number';
+
+    section.appendChild(barTrack);
+    section.appendChild(this.healthNumberElement);
+
+    return section;
+  }
+
+  buildAmmunitionSection() {
+    const section = document.createElement('div');
+    section.className = 'hud-ammunition';
+
+    this.magazineElement = document.createElement('div');
+    this.magazineElement.className = 'hud-ammunition-magazine';
+
+    this.weaponLabelElement = document.createElement('div');
+    this.weaponLabelElement.className = 'hud-ammunition-weapon';
+
+    this.reloadingElement = document.createElement('div');
+    this.reloadingElement.className = 'hud-ammunition-reloading';
+    this.reloadingElement.textContent = 'RELOADING';
+
+    section.appendChild(this.magazineElement);
+    section.appendChild(this.weaponLabelElement);
+    section.appendChild(this.reloadingElement);
+
+    return section;
+  }
+
+  buildTimerSection() {
+    const section = document.createElement('div');
+    section.className = 'hud-timer';
+
+    this.timerElement = document.createElement('div');
+    this.timerElement.className = 'hud-timer-clock';
+
+    this.killsElement = document.createElement('div');
+    this.killsElement.className = 'hud-timer-kills';
+
+    section.appendChild(this.timerElement);
+    section.appendChild(this.killsElement);
+
+    return section;
+  }
+
+  buildKillFeedSection() {
+    this.killFeedElement = document.createElement('div');
+    this.killFeedElement.className = 'hud-kill-feed';
+    return this.killFeedElement;
+  }
+
+  buildDamageVignette() {
+    this.damageVignetteElement = document.createElement('div');
+    this.damageVignetteElement.className = 'hud-damage-vignette';
+    return this.damageVignetteElement;
+  }
+
+  buildRespawnOverlay() {
+    this.respawnOverlayElement = document.createElement('div');
+    this.respawnOverlayElement.className = 'hud-respawn-overlay';
+
+    const message = document.createElement('div');
+    message.className = 'hud-respawn-message';
+    message.textContent = 'ELIMINATED';
+
+    this.respawnCountdownElement = document.createElement('div');
+    this.respawnCountdownElement.className = 'hud-respawn-countdown';
+
+    this.respawnOverlayElement.appendChild(message);
+    this.respawnOverlayElement.appendChild(this.respawnCountdownElement);
+
+    return this.respawnOverlayElement;
   }
 
   show() {
-    throw new Error('not implemented: PH-4-ui-shell');
+    this.container.classList.remove('is-hidden');
   }
 
   hide() {
-    throw new Error('not implemented: PH-4-ui-shell');
+    this.container.classList.add('is-hidden');
   }
 
   /**
@@ -27,21 +175,151 @@ export class Hud {
    * }} state
    */
   update(state) {
-    throw new Error('not implemented: PH-4-ui-shell');
+    const previous = this.previousState;
+
+    if (state.health !== previous.health) {
+      const clampedHealth = Math.max(0, Math.min(100, state.health));
+      this.healthBarFillElement.style.width = `${clampedHealth}%`;
+      this.healthBarFillElement.classList.toggle('is-low', state.health < LOW_HEALTH_THRESHOLD);
+      this.healthNumberElement.textContent = Math.ceil(state.health);
+      previous.health = state.health;
+    }
+
+    if (state.magazine !== previous.magazine || state.magazineSize !== previous.magazineSize) {
+      this.magazineElement.textContent = `${state.magazine} / ${state.magazineSize}`;
+      previous.magazine = state.magazine;
+      previous.magazineSize = state.magazineSize;
+    }
+
+    if (state.weaponLabel !== previous.weaponLabel) {
+      this.weaponLabelElement.textContent = state.weaponLabel;
+      previous.weaponLabel = state.weaponLabel;
+    }
+
+    if (state.reloading !== previous.reloading) {
+      this.reloadingElement.classList.toggle('is-visible', state.reloading);
+      previous.reloading = state.reloading;
+    }
+
+    if (state.secondsRemaining !== previous.secondsRemaining) {
+      this.timerElement.textContent = formatClock(state.secondsRemaining);
+      this.timerElement.classList.toggle('is-urgent', state.secondsRemaining <= TIMER_URGENT_SECONDS);
+      previous.secondsRemaining = state.secondsRemaining;
+    }
+
+    if (state.kills !== previous.kills) {
+      this.killsElement.textContent = `${state.kills} kills`;
+      previous.kills = state.kills;
+    }
+
+    if (state.alive !== previous.alive) {
+      this.respawnOverlayElement.classList.toggle('is-visible', !state.alive);
+      previous.alive = state.alive;
+    }
+
+    if (!state.alive && state.respawnSecondsRemaining !== previous.respawnSecondsRemaining) {
+      this.respawnCountdownElement.textContent = Math.ceil(state.respawnSecondsRemaining);
+      previous.respawnSecondsRemaining = state.respawnSecondsRemaining;
+    }
+
+    this.pruneKillFeedEntries();
   }
 
   /** Crosshair tick confirming damage was dealt. */
   showHitmarker(isKill) {
-    throw new Error('not implemented: PH-4-ui-shell');
+    this.hitmarkerElement.classList.remove('is-visible', 'is-kill');
+    // Force a reflow so the animation restarts when triggered in quick succession.
+    void this.hitmarkerElement.offsetWidth;
+    this.hitmarkerElement.classList.add('is-visible');
+    this.hitmarkerElement.classList.toggle('is-kill', isKill);
+
+    if (this.hitmarkerTimeoutHandle !== null) clearTimeout(this.hitmarkerTimeoutHandle);
+    this.hitmarkerTimeoutHandle = setTimeout(() => {
+      this.hitmarkerElement.classList.remove('is-visible');
+      this.hitmarkerTimeoutHandle = null;
+    }, HITMARKER_VISIBLE_SECONDS * 1000);
   }
 
   /** Red vignette pulse when the player takes damage. */
   showDamage(directionRadians) {
-    throw new Error('not implemented: PH-4-ui-shell');
+    const horizontalBias = Math.sin(directionRadians);
+    const verticalBias = -Math.cos(directionRadians);
+    this.damageVignetteElement.style.setProperty('--hud-damage-x', horizontalBias.toFixed(3));
+    this.damageVignetteElement.style.setProperty('--hud-damage-y', verticalBias.toFixed(3));
+
+    this.damageVignetteElement.classList.remove('is-visible');
+    void this.damageVignetteElement.offsetWidth;
+    this.damageVignetteElement.classList.add('is-visible');
+
+    if (this.damageFlashTimeoutHandle !== null) clearTimeout(this.damageFlashTimeoutHandle);
+    this.damageFlashTimeoutHandle = setTimeout(() => {
+      this.damageVignetteElement.classList.remove('is-visible');
+      this.damageFlashTimeoutHandle = null;
+    }, DAMAGE_FLASH_VISIBLE_SECONDS * 1000);
   }
 
   /** @param {{ killerName: string, victimName: string, weaponLabel: string, involvesPlayer: boolean }} entry */
   addKillFeedEntry(entry) {
-    throw new Error('not implemented: PH-4-ui-shell');
+    const element = document.createElement('div');
+    element.className = 'hud-kill-feed-entry';
+    element.classList.toggle('involves-player', entry.involvesPlayer);
+
+    const killer = document.createElement('span');
+    killer.className = 'hud-kill-feed-killer';
+    killer.textContent = entry.killerName;
+
+    const weapon = document.createElement('span');
+    weapon.className = 'hud-kill-feed-weapon';
+    weapon.textContent = entry.weaponLabel;
+
+    const victim = document.createElement('span');
+    victim.className = 'hud-kill-feed-victim';
+    victim.textContent = entry.victimName;
+
+    element.appendChild(killer);
+    element.appendChild(weapon);
+    element.appendChild(victim);
+
+    this.killFeedElement.insertBefore(element, this.killFeedElement.firstChild);
+
+    this.killFeedEntries.push({
+      element,
+      expiresAtSeconds: nowInSeconds() + KILL_FEED_ENTRY_LIFETIME_SECONDS,
+      isFading: false
+    });
   }
+
+  pruneKillFeedEntries() {
+    const now = nowInSeconds();
+
+    for (const entry of this.killFeedEntries) {
+      const remaining = entry.expiresAtSeconds - now;
+      const shouldFade = remaining <= KILL_FEED_ENTRY_FADE_SECONDS;
+      if (shouldFade !== entry.isFading) {
+        entry.element.classList.toggle('is-fading', shouldFade);
+        entry.isFading = shouldFade;
+      }
+    }
+
+    const stillLive = [];
+    for (const entry of this.killFeedEntries) {
+      if (now >= entry.expiresAtSeconds) {
+        entry.element.remove();
+      } else {
+        stillLive.push(entry);
+      }
+    }
+    this.killFeedEntries = stillLive;
+  }
+}
+
+function nowInSeconds() {
+  return performance.now() / 1000;
+}
+
+function formatClock(secondsRemaining) {
+  const clampedSeconds = Math.max(0, Math.ceil(secondsRemaining));
+  const minutes = Math.floor(clampedSeconds / 60);
+  const seconds = clampedSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
