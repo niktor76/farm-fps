@@ -291,8 +291,17 @@ html, body {
   transform: translateX(-50%);
 }
 
-.hud-crosshair-line--top { top: 0; }
-.hud-crosshair-line--bottom { bottom: 0; }
+.hud-crosshair {
+  --hud-crosshair-spread: 0px;
+  --hud-crosshair-aim: 0;
+}
+
+.hud-crosshair-line {
+  opacity: calc(1 - var(--hud-crosshair-aim));
+}
+
+.hud-crosshair-line--top { top: calc(0px - var(--hud-crosshair-spread)); }
+.hud-crosshair-line--bottom { bottom: calc(0px - var(--hud-crosshair-spread)); }
 
 .hud-crosshair-line--left,
 .hud-crosshair-line--right {
@@ -302,8 +311,8 @@ html, body {
   transform: translateY(-50%);
 }
 
-.hud-crosshair-line--left { left: 0; }
-.hud-crosshair-line--right { right: 0; }
+.hud-crosshair-line--left { left: calc(0px - var(--hud-crosshair-spread)); }
+.hud-crosshair-line--right { right: calc(0px - var(--hud-crosshair-spread)); }
 
 .hud-crosshair-dot {
   position: absolute;

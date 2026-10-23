@@ -206,7 +206,7 @@ export class Fighter {
 
     this.updateCrouch(deltaSeconds, collisionWorld, intent.wantsCrouch);
     this.updateStamina(deltaSeconds, intent);
-    this.updateAim(deltaSeconds, intent);
+    this.updateAimFraction(deltaSeconds, intent);
     this.updateRecoil(deltaSeconds);
     this.updateMovementSpread(deltaSeconds);
     this.applyAcceleration(deltaSeconds, intent);
@@ -296,7 +296,7 @@ export class Fighter {
    * Eases toward the aim wish over AIM.transitionSeconds. A sprint drops the
    * aim rather than being blocked by it, so the sprint key always sprints.
    */
-  updateAim(deltaSeconds, intent) {
+  updateAimFraction(deltaSeconds, intent) {
     const wantsAim =
       intent.wantsAim &&
       this.currentWeapon.kind === 'gun' &&

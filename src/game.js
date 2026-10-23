@@ -120,7 +120,9 @@ export class Game {
       kills: 0,
       alive: true,
       respawnSecondsRemaining: 0,
-      staminaFraction: 1
+      staminaFraction: 1,
+      aimFraction: 0,
+      movementSpread: 0
     };
 
     this.stats = new DebugStats();
@@ -324,6 +326,8 @@ export class Game {
     hudState.kills = this.player.kills;
     hudState.alive = this.player.alive;
     hudState.staminaFraction = this.player.staminaFraction;
+    hudState.aimFraction = this.player.aimFraction;
+    hudState.movementSpread = this.player.movementSpread;
     hudState.respawnSecondsRemaining = Math.max(
       0,
       MATCH.respawnDelaySeconds - this.player.respawnTimer
