@@ -6,6 +6,10 @@ import { CollisionWorld } from './world/collision.js';
 import { buildFarm } from './world/map.js';
 import { generateSpawnPoints, chooseSpawnPoint } from './world/spawns.js';
 import { Player } from './entities/player.js';
+import { Bot } from './entities/bot.js';
+import { updateNametag } from './entities/models.js';
+import { WaypointGraph } from './world/waypoints.js';
+import { BOT_NAMES, BOT_COLORS } from './config/names.js';
 import { Input } from './input.js';
 import { Hud } from './ui/hud.js';
 import { WeaponSystem } from './weapons/weapons.js';
@@ -17,8 +21,7 @@ import { CAMERA, MATCH } from './config/tunables.js';
  * One match: owns the scene, the fighters, the fixed-timestep loop, the match
  * timer, scoring and respawning.
  *
- * M2 scope: one human fighter with working weapons. Bots arrive in M3, the
- * results flow in M4.
+ * M3 scope: the player and the bots fight. The results flow arrives in M4.
  */
 export class Game {
   constructor({ canvas, uiRoot, settings, audio, onMatchEnd }) {
@@ -54,6 +57,7 @@ export class Game {
       random: this.random
     });
     this.spawnPoints = generateSpawnPoints(this.collisionWorld, this.random);
+    this.waypoints = WaypointGraph.build(this.collisionWorld, this.random, this.farm.coverPoints);
 
     this.input = new Input(canvas);
     this.input.setDeviceMode(settings.deviceMode);
@@ -73,7 +77,8 @@ export class Game {
     this.player.sensitivity = settings.sensitivity;
     this.player.setKeyboardTurnSpeed(settings.keyboardTurnDegreesPerSecond);
 
-    this.fighters = [this.player];
+    this.bots = this.createBots(settings);
+    this.fighters = [this.player, ...this.bots];
 
     this.weapons = new WeaponSystem({
       collisionWorld: this.collisionWorld,
@@ -87,7 +92,18 @@ export class Game {
     });
 
     this.spawn(this.player);
+    for (const bot of this.bots) this.spawn(bot);
     this.viewModel.setWeapon(this.player.currentWeapon.id);
+
+    this.elapsed = 0;
+    this.botContext = {
+      collisionWorld: this.collisionWorld,
+      waypoints: this.waypoints,
+      fighters: this.fighters,
+      weapons: this.weapons,
+      audio: this.audio,
+      elapsed: 0
+    };
 
     this.stats = new DebugStats();
     this.loop = new GameLoop({
@@ -106,6 +122,29 @@ export class Game {
     this.resize();
   }
 
+  createBots(settings) {
+    const names = this.random.shuffled(BOT_NAMES);
+    const bots = [];
+
+    for (let index = 0; index < settings.botCount; index += 1) {
+      const bot = new Bot({
+        id: index + 1,
+        name: names[index],
+        color: BOT_COLORS[index % BOT_COLORS.length],
+        feelKey: settings.feelKey,
+        difficultyKey: settings.difficultyKey,
+        random: this.random
+      });
+
+      this.scene.add(bot.model.group);
+      bot.nametag.visible = settings.showNametags;
+      this.scene.add(bot.nametag);
+      bots.push(bot);
+    }
+
+    return bots;
+  }
+
   start() {
     this.hud.show();
     this.loop.start();
@@ -121,8 +160,10 @@ export class Game {
       this.spawnPoints,
       this.fighters,
       fighter,
-      this.random
+      this.random,
+      this.collisionWorld
     );
+    if (fighter.isBot) this.waypoints.releaseAllFor(fighter.id);
     fighter.respawnAt(position, yaw);
     this.audio.play('spawn', fighter.isBot ? { position: fighter.position } : undefined);
   }
@@ -174,7 +215,21 @@ export class Game {
     }
 
     this.player.update(deltaSeconds, this.collisionWorld);
+    this.updateBots(deltaSeconds);
     this.effects.update(deltaSeconds);
+  }
+
+  /**
+   * Each bot owns its own think schedule, with a randomised start phase so ten
+   * bots do not all decide on the same frame.
+   */
+  updateBots(deltaSeconds) {
+    this.elapsed += deltaSeconds;
+    this.botContext.elapsed = this.elapsed;
+
+    for (const bot of this.bots) {
+      bot.update(deltaSeconds, this.botContext);
+    }
   }
 
   handlePlayerWeaponInput() {
@@ -222,6 +277,10 @@ export class Game {
         MATCH.respawnDelaySeconds - this.player.respawnTimer
       )
     });
+
+    if (this.settings.showNametags) {
+      for (const bot of this.bots) updateNametag(bot.nametag, bot, this.camera);
+    }
 
     this.renderer.render(this.scene, this.camera);
     this.stats.sampleFrame(frameSeconds, this.renderer);

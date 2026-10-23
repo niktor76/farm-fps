@@ -218,7 +218,8 @@ export class Hud {
     }
 
     if (!state.alive && state.respawnSecondsRemaining !== previous.respawnSecondsRemaining) {
-      this.respawnCountdownElement.textContent = Math.ceil(state.respawnSecondsRemaining);
+      const seconds = Math.ceil(state.respawnSecondsRemaining);
+      this.respawnCountdownElement.textContent = `Respawning in ${seconds}s`;
       previous.respawnSecondsRemaining = state.respawnSecondsRemaining;
     }
 

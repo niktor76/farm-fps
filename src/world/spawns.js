@@ -41,6 +41,8 @@ const YAW_JITTER = 0.35;
 
 const scratchForward = new THREE.Vector3();
 const scratchToPoint = new THREE.Vector3();
+const scratchWatcherEye = new THREE.Vector3();
+const scratchPointEye = new THREE.Vector3();
 const candidateScores = [];
 const viewCheckIndices = [];
 const bestIndices = [];
@@ -84,7 +86,7 @@ export function generateSpawnPoints(collisionWorld, random) {
  * @param {import('../entities/fighter.js').Fighter} forFighter
  * @returns {{ position: import('three').Vector3, yaw: number }}
  */
-export function chooseSpawnPoint(spawnPoints, fighters, forFighter, random) {
+export function chooseSpawnPoint(spawnPoints, fighters, forFighter, random, collisionWorld) {
   candidateScores.length = 0;
   for (const point of spawnPoints) {
     candidateScores.push(nearestEnemyDistance(point, fighters, forFighter));
@@ -94,7 +96,7 @@ export function chooseSpawnPoint(spawnPoints, fighters, forFighter, random) {
 
   for (const index of viewCheckIndices) {
     if (candidateScores[index] < MATCH.minimumSpawnDistanceToEnemy) continue;
-    if (!isWatched(spawnPoints[index], fighters, forFighter)) {
+    if (!isWatched(spawnPoints[index], fighters, forFighter, collisionWorld)) {
       candidateScores[index] += OUT_OF_VIEW_BONUS;
     }
   }
@@ -150,7 +152,7 @@ function nearestEnemyDistance(point, fighters, forFighter) {
  * the shooter's facing is available here, not the geometry between them, so
  * this is a cheap approximation of line of sight rather than a ray test.
  */
-function isWatched(point, fighters, forFighter) {
+function isWatched(point, fighters, forFighter, collisionWorld) {
   for (const fighter of fighters) {
     if (fighter === forFighter || !fighter.alive) continue;
 
@@ -161,7 +163,12 @@ function isWatched(point, fighters, forFighter) {
     scratchToPoint.divideScalar(distance);
 
     fighter.getForward(scratchForward);
-    if (scratchForward.dot(scratchToPoint) > VIEW_CONE_COSINE) return true;
+    if (scratchForward.dot(scratchToPoint) <= VIEW_CONE_COSINE) continue;
+
+    // Facing it is not enough: a spawn behind the barn is not actually watched.
+    fighter.getEyePosition(scratchWatcherEye);
+    scratchPointEye.set(point.x, point.y + FIGHTER.standingEyeHeight, point.z);
+    if (!collisionWorld.isBlocked(scratchWatcherEye, scratchPointEye)) return true;
   }
 
   return false;
