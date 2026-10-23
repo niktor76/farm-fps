@@ -47,6 +47,8 @@ html, body {
   --accent: #dba13c;
   --accent-strong: #f0b94f;
   --health-low: #d85a3f;
+  --stamina: #5fa8c4;
+  --stamina-exhausted: #c2703a;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -965,11 +967,6 @@ html, body {
 /* ---------------------------------------------------------------------- */
 /* HUD: stamina bar                                                        */
 /* ---------------------------------------------------------------------- */
-
-:root {
-  --stamina: #5fa8c4;
-  --stamina-exhausted: #c2703a;
-}
 
 .hud-health-bars {
   display: flex;
