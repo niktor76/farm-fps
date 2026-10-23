@@ -419,6 +419,16 @@ function sensitivityStep(device) {
   return (device.maximumSensitivity - device.minimumSensitivity) / INPUT.sensitivitySliderSteps;
 }
 
+/**
+ * Stored settings are editable by hand, so a value is only accepted when it is
+ * both finite and inside its control's range. An out-of-range bot count would
+ * otherwise spawn until the browser gave up.
+ */
+function storedNumber(value, fallback, minimum, maximum) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 function readStoredSettings() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return {};
@@ -439,15 +449,25 @@ function loadSettings() {
   const device = INPUT.devices[deviceMode];
 
   return {
-    botCount: Number.isFinite(parsed.botCount) ? parsed.botCount : MATCH.defaultBotCount,
+    botCount: Math.round(
+      storedNumber(parsed.botCount, MATCH.defaultBotCount, MATCH.minimumBotCount, MATCH.maximumBotCount)
+    ),
     difficultyKey: DIFFICULTIES[parsed.difficultyKey] ? parsed.difficultyKey : DEFAULT_DIFFICULTY,
     feelKey: FEEL_PRESETS[parsed.feelKey] ? parsed.feelKey : DEFAULT_FEEL,
     deviceMode,
-    sensitivity: Number.isFinite(parsed.sensitivity) ? parsed.sensitivity : device.defaultSensitivity,
-    keyboardTurnDegreesPerSecond: Number.isFinite(parsed.keyboardTurnDegreesPerSecond)
-      ? parsed.keyboardTurnDegreesPerSecond
-      : INPUT.keyboardLook.yawDegreesPerSecond,
-    volume: Number.isFinite(parsed.volume) ? parsed.volume : AUDIO.defaultVolume,
+    sensitivity: storedNumber(
+      parsed.sensitivity,
+      device.defaultSensitivity,
+      device.minimumSensitivity,
+      device.maximumSensitivity
+    ),
+    keyboardTurnDegreesPerSecond: storedNumber(
+      parsed.keyboardTurnDegreesPerSecond,
+      INPUT.keyboardLook.yawDegreesPerSecond,
+      INPUT.keyboardLook.minimumYawDegreesPerSecond,
+      INPUT.keyboardLook.maximumYawDegreesPerSecond
+    ),
+    volume: storedNumber(parsed.volume, AUDIO.defaultVolume, 0, 1),
     showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : true
   };
 }
