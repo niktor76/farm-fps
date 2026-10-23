@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { MATCH, WORLD, FIGHTER, DIFFICULTIES, DEFAULT_DIFFICULTY } from '../config/tunables.js';
+import { MATCH, WORLD, FIGHTER, DIFFICULTIES } from '../config/tunables.js';
 
 /** How far a spawn stays off the fence, so nobody appears nose-first in a post. */
 const FENCE_MARGIN = 3;
@@ -28,9 +28,15 @@ const ATTEMPTS_PER_RELAXATION = 40;
 
 /** Only the strongest few candidates are worth a facing check. */
 const VIEW_CHECK_COUNT = 5;
-const VIEW_CONE_COSINE = Math.cos(
-  (DIFFICULTIES[DEFAULT_DIFFICULTY].fieldOfViewDegrees * Math.PI) / 180 / 2
+/**
+ * Widest field of view any difficulty gives a bot. Spawn selection does not
+ * know which tier is running, so it avoids the most watchful case rather than
+ * assuming one, and stays correct when the debug panel retunes a tier live.
+ */
+const WIDEST_FIELD_OF_VIEW_DEGREES = Math.max(
+  ...Object.values(DIFFICULTIES).map((tier) => tier.fieldOfViewDegrees)
 );
+const VIEW_CONE_COSINE = Math.cos((WIDEST_FIELD_OF_VIEW_DEGREES * Math.PI) / 180 / 2);
 const OUT_OF_VIEW_BONUS = 9;
 
 /**

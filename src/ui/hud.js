@@ -169,6 +169,12 @@ export class Hud {
     this.container.classList.add('is-hidden');
   }
 
+  dispose() {
+    clearTimeout(this.hitmarkerTimeoutHandle);
+    clearTimeout(this.damageFlashTimeoutHandle);
+    this.container.remove();
+  }
+
   /**
    * @param {{
    *   health: number, magazine: number, magazineSize: number,
@@ -222,10 +228,10 @@ export class Hud {
       previous.alive = state.alive;
     }
 
-    if (!state.alive && state.respawnSecondsRemaining !== previous.respawnSecondsRemaining) {
-      const seconds = Math.ceil(state.respawnSecondsRemaining);
-      this.respawnCountdownElement.textContent = `Respawning in ${seconds}s`;
-      previous.respawnSecondsRemaining = state.respawnSecondsRemaining;
+    const wholeRespawnSeconds = Math.ceil(state.respawnSecondsRemaining);
+    if (!state.alive && wholeRespawnSeconds !== previous.respawnSecondsRemaining) {
+      this.respawnCountdownElement.textContent = `Respawning in ${wholeRespawnSeconds}s`;
+      previous.respawnSecondsRemaining = wholeRespawnSeconds;
     }
 
     this.pruneKillFeedEntries();

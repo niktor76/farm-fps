@@ -161,12 +161,15 @@ export class Game {
   }
 
   start() {
+    this.input.setEnabled(true);
     this.hud.show();
     this.loop.start();
   }
 
   stop() {
     this.loop.stop();
+    this.input.releaseLock();
+    this.input.setEnabled(false);
     this.hud.hide();
     this.scoreboard.hide();
     this.scoreboardVisible = false;
@@ -252,6 +255,7 @@ export class Game {
     this.player.update(deltaSeconds, this.collisionWorld);
     this.updateBots(deltaSeconds);
     this.effects.update(deltaSeconds);
+    this.input.endFrame();
   }
 
   /**
@@ -317,7 +321,6 @@ export class Game {
     this.renderer.render(this.scene, this.camera);
     this.stats.sampleFrame(frameSeconds, this.renderer);
     this.debugPanel.update(this);
-    this.input.endFrame();
   }
 
   resize() {
@@ -333,8 +336,39 @@ export class Game {
     for (const bot of this.bots) bot.dispose();
     this.input.dispose();
     this.debugPanel.dispose();
+    this.hud.dispose();
+    this.scoreboard.dispose();
+    this.viewModel.dispose();
     this.canvas.removeEventListener('click', this.handleCanvasClick);
     window.removeEventListener('resize', this.handleResize);
+    disposeSceneResources(this.scene);
     this.renderer.dispose();
   }
+}
+
+
+/**
+ * Frees the geometry, materials and textures of a finished match. The renderer
+ * keeps its WebGL context across matches, so anything not released here stays
+ * resident on the GPU for the rest of the session.
+ */
+function disposeSceneResources(scene) {
+  const seenMaterials = new Set();
+
+  scene.traverse((object) => {
+    if (object.geometry) object.geometry.dispose();
+
+    const material = object.material;
+    if (!material) return;
+
+    const materials = Array.isArray(material) ? material : [material];
+    for (const entry of materials) {
+      if (seenMaterials.has(entry)) continue;
+      seenMaterials.add(entry);
+      if (entry.map) entry.map.dispose();
+      entry.dispose();
+    }
+  });
+
+  scene.clear();
 }

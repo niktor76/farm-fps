@@ -123,4 +123,8 @@ export class Scoreboard {
   hide() {
     this.container.classList.add('is-hidden');
   }
+  dispose() {
+    this.container.remove();
+  }
+
 }

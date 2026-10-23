@@ -66,8 +66,10 @@ export class Input {
     this.smoothedLookY = 0;
     this.weaponSlotRequest = null;
     this.wheelDirection = 0;
+    this.enabled = true;
 
     this.onKeyDown = (event) => {
+      if (!this.enabled) return;
       if (SWALLOWED_KEY_CODES.has(event.code)) event.preventDefault();
       if (event.repeat) return;
 
@@ -88,6 +90,9 @@ export class Input {
 
     this.onMouseDown = (event) => {
       if (event.button !== 0) return;
+      // Not while unlocked: that click is the one re-acquiring pointer lock,
+      // and it would otherwise fire a shot before the lock is even granted.
+      if (!this.enabled || !this.locked) return;
       this.downActions.add('fire');
       this.pressedActions.add('fire');
     };
@@ -150,6 +155,21 @@ export class Input {
     const magnitude = Math.abs(delta);
     const factor = this.deviceProfile.accelerationExponentFactor;
     return Math.sign(delta) * (magnitude + factor * magnitude * magnitude);
+  }
+
+  /** Enabled only during a match, so menu and results screens keep their keys. */
+  setEnabled(enabled) {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.downActions.clear();
+      this.pressedActions.clear();
+      this.weaponSlotRequest = null;
+      this.wheelDirection = 0;
+    }
+  }
+
+  releaseLock() {
+    if (document.pointerLockElement) document.exitPointerLock();
   }
 
   requestLock() {

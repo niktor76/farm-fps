@@ -237,6 +237,14 @@ export class ViewModel {
     this.reloadDuration = durationSeconds;
   }
 
+  dispose() {
+    this.camera.remove(this.group);
+    this.group.traverse((object) => {
+      if (object.geometry) object.geometry.dispose();
+      if (object.material) object.material.dispose();
+    });
+  }
+
   playMelee(durationSeconds) {
     this.meleeTimer = durationSeconds;
     this.meleeDuration = durationSeconds;
