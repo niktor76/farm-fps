@@ -12,6 +12,8 @@ import { WaypointGraph } from './world/waypoints.js';
 import { BOT_NAMES, BOT_COLORS } from './config/names.js';
 import { Input } from './input.js';
 import { Hud } from './ui/hud.js';
+import { Scoreboard } from './ui/scoreboard.js';
+import { DebugPanel } from './ui/debug.js';
 import { WeaponSystem } from './weapons/weapons.js';
 import { EffectSystem } from './weapons/effects.js';
 import { ViewModel } from './weapons/viewmodel.js';
@@ -26,6 +28,7 @@ import { CAMERA, MATCH } from './config/tunables.js';
 export class Game {
   constructor({ canvas, uiRoot, settings, audio, onMatchEnd }) {
     this.settings = settings;
+    this.difficultyKey = settings.difficultyKey;
     this.audio = audio;
     this.onMatchEnd = onMatchEnd;
     this.secondsRemaining = MATCH.durationSeconds;
@@ -62,6 +65,8 @@ export class Game {
     this.input = new Input(canvas);
     this.input.setDeviceMode(settings.deviceMode);
     this.hud = new Hud(uiRoot);
+    this.scoreboard = new Scoreboard(uiRoot);
+    this.scoreboardVisible = false;
     this.effects = new EffectSystem(this.scene, this.farm.materials);
     this.viewModel = new ViewModel(this.camera, this.farm.materials);
 
@@ -106,6 +111,7 @@ export class Game {
     };
 
     this.stats = new DebugStats();
+    this.debugPanel = new DebugPanel(uiRoot, this);
     this.loop = new GameLoop({
       onFixedStep: (deltaSeconds) => this.fixedStep(deltaSeconds),
       onRender: (frameSeconds) => this.render(frameSeconds)
@@ -153,6 +159,18 @@ export class Game {
   stop() {
     this.loop.stop();
     this.hud.hide();
+    this.scoreboard.hide();
+    this.scoreboardVisible = false;
+  }
+
+  /** Tab is held, not toggled, so the rows are rebuilt only on the transition. */
+  updateScoreboard() {
+    const wanted = this.input.isDown('scoreboard');
+    if (wanted === this.scoreboardVisible) return;
+
+    this.scoreboardVisible = wanted;
+    if (wanted) this.scoreboard.show(this.fighters, this.player.id);
+    else this.scoreboard.hide();
   }
 
   spawn(fighter) {
@@ -205,6 +223,7 @@ export class Game {
       return;
     }
 
+    this.updateScoreboard();
     this.handlePlayerWeaponInput();
 
     for (const fighter of this.fighters) {
@@ -284,6 +303,7 @@ export class Game {
 
     this.renderer.render(this.scene, this.camera);
     this.stats.sampleFrame(frameSeconds, this.renderer);
+    this.debugPanel.update(this);
     this.input.endFrame();
   }
 
@@ -297,7 +317,9 @@ export class Game {
 
   dispose() {
     this.stop();
+    for (const bot of this.bots) bot.dispose?.();
     this.input.dispose();
+    this.debugPanel.dispose?.();
     this.canvas.removeEventListener('click', this.handleCanvasClick);
     window.removeEventListener('resize', this.handleResize);
     this.renderer.dispose();
