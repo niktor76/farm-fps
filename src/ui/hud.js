@@ -1,6 +1,8 @@
+import { FIGHTER } from '../config/tunables.js';
+
 const KILL_FEED_ENTRY_LIFETIME_SECONDS = 5;
 const KILL_FEED_ENTRY_FADE_SECONDS = 1;
-const LOW_HEALTH_THRESHOLD = 35;
+const LOW_HEALTH_FRACTION = 0.35;
 const TIMER_URGENT_SECONDS = 30;
 const HITMARKER_VISIBLE_SECONDS = 0.25;
 const DAMAGE_FLASH_VISIBLE_SECONDS = 0.5;
@@ -11,6 +13,7 @@ const DAMAGE_FLASH_VISIBLE_SECONDS = 0.5;
  *
  * Owned by PH-4-ui-shell.
  */
+
 export class Hud {
   /** @param {HTMLElement} root */
   constructor(root) {
@@ -178,9 +181,10 @@ export class Hud {
     const previous = this.previousState;
 
     if (state.health !== previous.health) {
-      const clampedHealth = Math.max(0, Math.min(100, state.health));
-      this.healthBarFillElement.style.width = `${clampedHealth}%`;
-      this.healthBarFillElement.classList.toggle('is-low', state.health < LOW_HEALTH_THRESHOLD);
+      const clampedHealth = Math.max(0, Math.min(FIGHTER.maximumHealth, state.health));
+      const healthFraction = clampedHealth / FIGHTER.maximumHealth;
+      this.healthBarFillElement.style.width = `${healthFraction * 100}%`;
+      this.healthBarFillElement.classList.toggle('is-low', state.health < FIGHTER.maximumHealth * LOW_HEALTH_FRACTION);
       this.healthNumberElement.textContent = Math.ceil(state.health);
       previous.health = state.health;
     }
@@ -201,14 +205,15 @@ export class Hud {
       previous.reloading = state.reloading;
     }
 
-    if (state.secondsRemaining !== previous.secondsRemaining) {
-      this.timerElement.textContent = formatClock(state.secondsRemaining);
-      this.timerElement.classList.toggle('is-urgent', state.secondsRemaining <= TIMER_URGENT_SECONDS);
-      previous.secondsRemaining = state.secondsRemaining;
+    const wholeSecondsRemaining = Math.ceil(state.secondsRemaining);
+    if (wholeSecondsRemaining !== previous.secondsRemaining) {
+      this.timerElement.textContent = formatClock(wholeSecondsRemaining);
+      this.timerElement.classList.toggle('is-urgent', wholeSecondsRemaining <= TIMER_URGENT_SECONDS);
+      previous.secondsRemaining = wholeSecondsRemaining;
     }
 
     if (state.kills !== previous.kills) {
-      this.killsElement.textContent = `${state.kills} kills`;
+      this.killsElement.textContent = state.kills === 1 ? '1 kill' : `${state.kills} kills`;
       previous.kills = state.kills;
     }
 
@@ -291,26 +296,28 @@ export class Hud {
   }
 
   pruneKillFeedEntries() {
+    if (this.killFeedEntries.length === 0) return;
+
     const now = nowInSeconds();
+    let writeIndex = 0;
 
     for (const entry of this.killFeedEntries) {
-      const remaining = entry.expiresAtSeconds - now;
-      const shouldFade = remaining <= KILL_FEED_ENTRY_FADE_SECONDS;
+      if (now >= entry.expiresAtSeconds) {
+        entry.element.remove();
+        continue;
+      }
+
+      const shouldFade = entry.expiresAtSeconds - now <= KILL_FEED_ENTRY_FADE_SECONDS;
       if (shouldFade !== entry.isFading) {
         entry.element.classList.toggle('is-fading', shouldFade);
         entry.isFading = shouldFade;
       }
+
+      this.killFeedEntries[writeIndex] = entry;
+      writeIndex += 1;
     }
 
-    const stillLive = [];
-    for (const entry of this.killFeedEntries) {
-      if (now >= entry.expiresAtSeconds) {
-        entry.element.remove();
-      } else {
-        stillLive.push(entry);
-      }
-    }
-    this.killFeedEntries = stillLive;
+    this.killFeedEntries.length = writeIndex;
   }
 }
 

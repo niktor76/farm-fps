@@ -36,8 +36,8 @@ export class WeaponSystem {
    *   effects: import('./effects.js').EffectSystem,
    *   audio: import('../audio/audio.js').AudioEngine,
    *   random: import('../core/rng.js').Random,
-   *   onDamage: (target, amount, attacker, isHeadshot) => void,
-   *   onKill: (victim, killer, weaponId) => void
+   *   onDamage: (target, amount, attacker) => { killed: boolean, remaining: number },
+   *   onKill: (victim, killer, weapon) => void
    * }} options
    */
   constructor({ collisionWorld, fighters, effects, audio, random, onDamage, onKill }) {
@@ -160,7 +160,7 @@ export class WeaponSystem {
       }
 
       this.effects.spawnBloodHit(result.point);
-      this.deliverDamage(fighter, result.target, result.damage, result.isHeadshot, weapon);
+      this.deliverDamage(fighter, result.target, result.damage, weapon);
     }
 
     fighter.currentSpread = Math.min(weapon.maximumSpread, spread + weapon.spreadPerShot);
@@ -182,7 +182,7 @@ export class WeaponSystem {
     scratchTargetBox.getCenter(scratchTargetCenter);
     this.effects.spawnBloodHit(scratchTargetCenter);
 
-    this.deliverDamage(fighter, target, weapon.damage, false, weapon);
+    this.deliverDamage(fighter, target, weapon.damage, weapon);
     return true;
   }
 
@@ -190,17 +190,15 @@ export class WeaponSystem {
    * The match layer owns applyDamage, so a kill is detected by the target's
    * alive flag flipping across the callback rather than from a return value.
    */
-  deliverDamage(attacker, target, amount, isHeadshot, weapon) {
-    const wasAlive = target.alive;
-
-    this.onDamage(target, amount, attacker, isHeadshot);
+  deliverDamage(attacker, target, amount, weapon) {
+    const result = this.onDamage(target, amount, attacker);
 
     if (!attacker.isBot) this.audio.play('hitmarker');
     if (!target.isBot) this.audio.play('hit');
 
-    if (!wasAlive || target.alive) return;
+    if (!result.killed) return;
 
-    this.onKill(target, attacker, weapon.id);
+    this.onKill(target, attacker, weapon);
     if (!attacker.isBot) this.audio.play('death');
   }
 

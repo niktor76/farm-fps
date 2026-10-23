@@ -91,16 +91,13 @@ export class Game {
       effects: this.effects,
       audio: this.audio,
       random: this.random,
-      onDamage: (target, amount, attacker, isHeadshot) =>
-        this.applyDamage(target, amount, attacker, isHeadshot),
-      onKill: (victim, killer, weaponId) => this.registerKill(victim, killer, weaponId)
+      onDamage: (target, amount, attacker) => this.applyDamage(target, amount, attacker),
+      onKill: (victim, killer, weapon) => this.registerKill(victim, killer, weapon)
     });
 
     this.spawn(this.player);
     for (const bot of this.bots) this.spawn(bot);
-    this.viewModel.setWeapon(this.player.currentWeapon.id);
 
-    this.elapsed = 0;
     this.botContext = {
       collisionWorld: this.collisionWorld,
       waypoints: this.waypoints,
@@ -110,10 +107,22 @@ export class Game {
       elapsed: 0
     };
 
+    this.hudState = {
+      health: 0,
+      magazine: 0,
+      magazineSize: 0,
+      weaponLabel: '',
+      reloading: false,
+      secondsRemaining: 0,
+      kills: 0,
+      alive: true,
+      respawnSecondsRemaining: 0
+    };
+
     this.stats = new DebugStats();
     this.debugPanel = new DebugPanel(uiRoot, this);
     this.loop = new GameLoop({
-      onFixedStep: (deltaSeconds) => this.fixedStep(deltaSeconds),
+      onFixedStep: (deltaSeconds, elapsed) => this.fixedStep(deltaSeconds, elapsed),
       onRender: (frameSeconds) => this.render(frameSeconds)
     });
 
@@ -183,23 +192,29 @@ export class Game {
     );
     if (fighter.isBot) this.waypoints.releaseAllFor(fighter.id);
     fighter.respawnAt(position, yaw);
+
+    if (fighter === this.player) {
+      this.viewModel.reset();
+      this.viewModel.setWeapon(fighter.currentWeapon.id);
+    }
     this.audio.play('spawn', fighter.isBot ? { position: fighter.position } : undefined);
   }
 
-  applyDamage(target, amount, attacker, isHeadshot) {
-    target.applyDamage(amount, attacker.id);
+  applyDamage(target, amount, attacker) {
+    const result = target.applyDamage(amount, attacker.id);
 
-    if (target === this.player) {
-      this.hud.showDamage(this.bearingTo(attacker.position));
-    }
+    if (attacker === this.player) this.hud.showHitmarker(result.killed);
+    if (target === this.player) this.hud.showDamage(this.bearingTo(attacker.position));
+
+    return result;
   }
 
-  registerKill(victim, killer, weaponId) {
+  registerKill(victim, killer, weapon) {
     killer.kills += 1;
     this.hud.addKillFeedEntry({
       killerName: killer.name,
       victimName: victim.name,
-      weaponLabel: killer.weapons.find((weapon) => weapon.id === weaponId).label,
+      weaponLabel: weapon.label,
       involvesPlayer: killer === this.player || victim === this.player
     });
   }
@@ -211,7 +226,7 @@ export class Game {
     return Math.atan2(offsetX, -offsetZ) - this.player.yaw;
   }
 
-  fixedStep(deltaSeconds) {
+  fixedStep(deltaSeconds, elapsed) {
     if (this.finished) return;
 
     this.secondsRemaining -= deltaSeconds;
@@ -223,6 +238,7 @@ export class Game {
       return;
     }
 
+    this.botContext.elapsed = elapsed;
     this.updateScoreboard();
     this.handlePlayerWeaponInput();
 
@@ -243,9 +259,6 @@ export class Game {
    * bots do not all decide on the same frame.
    */
   updateBots(deltaSeconds) {
-    this.elapsed += deltaSeconds;
-    this.botContext.elapsed = this.elapsed;
-
     for (const bot of this.bots) {
       bot.update(deltaSeconds, this.botContext);
     }
@@ -282,20 +295,20 @@ export class Game {
     this.audio.setListener(this.player.position, this.player.yaw);
 
     const weapon = this.player.currentWeapon;
-    this.hud.update({
-      health: this.player.health,
-      magazine: this.player.currentMagazine,
-      magazineSize: weapon.magazineSize ?? 0,
-      weaponLabel: weapon.label,
-      reloading: this.player.reloading,
-      secondsRemaining: this.secondsRemaining,
-      kills: this.player.kills,
-      alive: this.player.alive,
-      respawnSecondsRemaining: Math.max(
-        0,
-        MATCH.respawnDelaySeconds - this.player.respawnTimer
-      )
-    });
+    const hudState = this.hudState;
+    hudState.health = this.player.health;
+    hudState.magazine = this.player.currentMagazine;
+    hudState.magazineSize = weapon.magazineSize ?? 0;
+    hudState.weaponLabel = weapon.label;
+    hudState.reloading = this.player.reloading;
+    hudState.secondsRemaining = this.secondsRemaining;
+    hudState.kills = this.player.kills;
+    hudState.alive = this.player.alive;
+    hudState.respawnSecondsRemaining = Math.max(
+      0,
+      MATCH.respawnDelaySeconds - this.player.respawnTimer
+    );
+    this.hud.update(hudState);
 
     if (this.settings.showNametags) {
       for (const bot of this.bots) updateNametag(bot.nametag, bot, this.camera);
@@ -317,9 +330,9 @@ export class Game {
 
   dispose() {
     this.stop();
-    for (const bot of this.bots) bot.dispose?.();
+    for (const bot of this.bots) bot.dispose();
     this.input.dispose();
-    this.debugPanel.dispose?.();
+    this.debugPanel.dispose();
     this.canvas.removeEventListener('click', this.handleCanvasClick);
     window.removeEventListener('resize', this.handleResize);
     this.renderer.dispose();

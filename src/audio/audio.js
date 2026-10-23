@@ -117,6 +117,8 @@ function stereoPan(offsetX, offsetZ, distance, yaw) {
 }
 
 /** @typedef {'pistol'|'rifle'|'shotgun'|'melee'|'reload'|'shell'|'footstep'|'hit'|'hitmarker'|'death'|'empty'|'spawn'} SoundName */
+const NO_OPTIONS = Object.freeze({});
+
 export class AudioEngine {
   constructor() {
     this.context = new AudioContext({ latencyHint: 'interactive' });
@@ -169,7 +171,7 @@ export class AudioEngine {
    * @param {SoundName} name
    * @param {{ position?: import('three').Vector3, pitchVariation?: number }} [options]
    */
-  play(name, options = {}) {
+  play(name, options = NO_OPTIONS) {
     // Nodes scheduled while suspended all fire together on resume; drop them instead.
     if (this.context.state !== 'running') return;
 

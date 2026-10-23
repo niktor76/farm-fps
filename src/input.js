@@ -179,10 +179,6 @@ export class Input {
     result.catch(() => this.canvas.requestPointerLock());
   }
 
-  releaseLock() {
-    document.exitPointerLock();
-  }
-
   /** @returns {boolean} */
   get locked() {
     return document.pointerLockElement === this.canvas;

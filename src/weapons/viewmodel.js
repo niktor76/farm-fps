@@ -222,6 +222,12 @@ export class ViewModel {
     this.swayVertical += (verticalTarget - this.swayVertical) * blend;
   }
 
+  /** Cancels any animation in progress. Death interrupts a reload. */
+  reset() {
+    this.reloadTimer = 0;
+    this.meleeTimer = 0;
+  }
+
   playFire() {
     this.firingTimer = FIRE_KICK_SECONDS;
   }

@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { MATCH, WORLD, FIGHTER } from '../config/tunables.js';
+import { MATCH, WORLD, FIGHTER, DIFFICULTIES, DEFAULT_DIFFICULTY } from '../config/tunables.js';
 
 /** How far a spawn stays off the fence, so nobody appears nose-first in a post. */
 const FENCE_MARGIN = 3;
@@ -28,7 +28,9 @@ const ATTEMPTS_PER_RELAXATION = 40;
 
 /** Only the strongest few candidates are worth a facing check. */
 const VIEW_CHECK_COUNT = 5;
-const VIEW_CONE_COSINE = Math.cos((130 * Math.PI) / 180 / 2);
+const VIEW_CONE_COSINE = Math.cos(
+  (DIFFICULTIES[DEFAULT_DIFFICULTY].fieldOfViewDegrees * Math.PI) / 180 / 2
+);
 const OUT_OF_VIEW_BONUS = 9;
 
 /**

@@ -27,13 +27,6 @@ export class Random {
     return items[this.integer(0, items.length)];
   }
 
-  /** Normally distributed value, mean 0 standard deviation 1 (Box-Muller). */
-  gaussian() {
-    const u = 1 - this.next();
-    const v = this.next();
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  }
-
   shuffled(items) {
     const copy = items.slice();
     for (let i = copy.length - 1; i > 0; i -= 1) {

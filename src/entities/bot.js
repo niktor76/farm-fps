@@ -83,7 +83,6 @@ const COMBAT = {
 
 const ROAM = { candidateCount: 4 };
 
-const NAMETAG_RISE_METRES = 0.3;
 
 const STUCK_SAMPLE_COUNT = Math.round(STUCK.windowSeconds / STUCK.sampleIntervalSeconds) + 1;
 
@@ -141,7 +140,6 @@ export class Bot extends Fighter {
     this.targetVisible = false;
     this.lastSeenElapsed = -Infinity;
     this.lastKnownPosition = new THREE.Vector3();
-    this.acquiredElapsed = 0;
     this.canFireElapsed = 0;
 
     this.aimConeRadians = 0;
@@ -173,7 +171,6 @@ export class Bot extends Fighter {
     this.stuckSampleCount = 0;
     this.stuckSampleTimer = STUCK.sampleIntervalSeconds;
     this.stuckSeconds = 0;
-    this.stuckCount = 0;
 
     this.recoveryStage = 0;
     this.recoveryTimer = 0;
@@ -284,7 +281,6 @@ export class Bot extends Fighter {
 
     if (!this.targetVisible || best !== this.target) {
       this.aimConeRadians = THREE.MathUtils.degToRad(this.difficulty.initialAimErrorDegrees);
-      this.acquiredElapsed = elapsed;
       this.canFireElapsed = elapsed + this.difficulty.reactionDelay;
       this.reaimTimer = 0;
       this.burstShotsRemaining = this.rollBurstShots();
@@ -1016,8 +1012,6 @@ export class Bot extends Fighter {
 
     this.stuckSeconds += STUCK.sampleIntervalSeconds;
     if (this.stuckSeconds < STUCK.confirmSeconds) return;
-
-    this.stuckCount += 1;
     this.beginRecovery();
   }
 
@@ -1180,14 +1174,6 @@ export class Bot extends Fighter {
   syncVisuals(deltaSeconds) {
     this.model.update(this, deltaSeconds);
 
-    this.nametag.visible = this.alive;
-    if (!this.alive) return;
-
-    this.nametag.position.set(
-      this.position.x,
-      this.position.y + FIGHTER.standingHeight + NAMETAG_RISE_METRES,
-      this.position.z
-    );
   }
 
   dispose() {

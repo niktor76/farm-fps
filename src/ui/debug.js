@@ -300,4 +300,9 @@ export class DebugPanel {
       this.writeStat(entry.reservation, bot.reservedNode !== -1 ? 'yes' : '-');
     }
   }
+
+  dispose() {
+    window.removeEventListener('keydown', this.handleKeyDown);
+    this.element.remove();
+  }
 }

@@ -40,10 +40,6 @@ export class CollisionWorld {
     );
   }
 
-  addBoxFromObject(object) {
-    return this.addBox(new THREE.Box3().setFromObject(object));
-  }
-
   /** The four fence walls that bound the play area. */
   addPlayBoundary() {
     const extent = WORLD.playHalfExtent;
@@ -151,23 +147,26 @@ export class CollisionWorld {
   raycast(origin, direction, maximumDistance, hitPoint = null) {
     scratchRay.origin.copy(origin);
     scratchRay.direction.copy(direction);
+    setSegmentBounds(origin, direction, maximumDistance);
 
-    let nearest = maximumDistance;
+    let nearestSquared = maximumDistance * maximumDistance;
     let found = false;
 
     for (const box of this.boxes) {
+      if (!boxOverlapsSegmentBounds(box)) continue;
+
       const point = scratchRay.intersectBox(box, scratchPoint);
       if (point === null) continue;
 
-      const distance = origin.distanceTo(point);
-      if (distance >= nearest) continue;
+      const distanceSquared = origin.distanceToSquared(point);
+      if (distanceSquared >= nearestSquared) continue;
 
-      nearest = distance;
+      nearestSquared = distanceSquared;
       found = true;
       if (hitPoint) hitPoint.copy(point);
     }
 
-    return found ? nearest : Infinity;
+    return found ? Math.sqrt(nearestSquared) : Infinity;
   }
 
   /** True when static geometry blocks the segment between two points. */
@@ -180,10 +179,15 @@ export class CollisionWorld {
     scratchRay.origin.copy(from);
     scratchRay.direction.copy(scratchDirection);
 
+    setSegmentBounds(from, scratchDirection, distance);
+    const distanceSquared = distance * distance;
+
     for (const box of this.boxes) {
+      if (!boxOverlapsSegmentBounds(box)) continue;
+
       const point = scratchRay.intersectBox(box, scratchPoint);
       if (point === null) continue;
-      if (from.distanceTo(point) < distance) return true;
+      if (from.distanceToSquared(point) < distanceSquared) return true;
     }
 
     return false;
@@ -209,4 +213,36 @@ function circleOverlapsBoxFootprint(x, z, radius, box) {
   const offsetX = x - closestX;
   const offsetZ = z - closestZ;
   return offsetX * offsetX + offsetZ * offsetZ < radius * radius;
+}
+
+/**
+ * Broad phase for the ray queries. Both walk every box, so rejecting on the
+ * segment's bounding box first removes the overwhelming majority of them: a
+ * bot's three metre avoidance probe otherwise intersected all ninety-odd
+ * boxes spread over an eighty metre field.
+ */
+const segmentBounds = { minimumX: 0, maximumX: 0, minimumY: 0, maximumY: 0, minimumZ: 0, maximumZ: 0 };
+
+function setSegmentBounds(origin, direction, length) {
+  const endX = origin.x + direction.x * length;
+  const endY = origin.y + direction.y * length;
+  const endZ = origin.z + direction.z * length;
+
+  segmentBounds.minimumX = Math.min(origin.x, endX);
+  segmentBounds.maximumX = Math.max(origin.x, endX);
+  segmentBounds.minimumY = Math.min(origin.y, endY);
+  segmentBounds.maximumY = Math.max(origin.y, endY);
+  segmentBounds.minimumZ = Math.min(origin.z, endZ);
+  segmentBounds.maximumZ = Math.max(origin.z, endZ);
+}
+
+function boxOverlapsSegmentBounds(box) {
+  return (
+    box.max.x >= segmentBounds.minimumX &&
+    box.min.x <= segmentBounds.maximumX &&
+    box.max.y >= segmentBounds.minimumY &&
+    box.min.y <= segmentBounds.maximumY &&
+    box.max.z >= segmentBounds.minimumZ &&
+    box.min.z <= segmentBounds.maximumZ
+  );
 }

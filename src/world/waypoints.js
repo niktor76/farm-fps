@@ -171,10 +171,6 @@ export class WaypointGraph {
     return new WaypointGraph(collisionWorld, keptNodes, keptEdges);
   }
 
-  nodeType(index) {
-    return this.nodeTypes[index];
-  }
-
   isThresholdNode(index) {
     return this.nodeTypes[index] === NODE_TYPE.threshold;
   }
@@ -186,10 +182,6 @@ export class WaypointGraph {
   /** How close a bot must get before the node counts as reached. */
   arrivalRadius(index) {
     return this.arrivalRadii[index];
-  }
-
-  nodeCapacity(index) {
-    return this.capacities[index];
   }
 
   /** @returns {number} index of the node nearest to a world position */
