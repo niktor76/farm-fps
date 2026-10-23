@@ -40,7 +40,7 @@ export class WeaponSystem {
    *   onKill: (victim, killer, weapon) => void
    * }} options
    */
-  constructor({ collisionWorld, fighters, effects, audio, random, onDamage, onKill }) {
+  constructor({ collisionWorld, fighters, effects, audio, random, onDamage, onKill, resolveMuzzle }) {
     this.collisionWorld = collisionWorld;
     this.fighters = fighters;
     this.effects = effects;
@@ -48,6 +48,7 @@ export class WeaponSystem {
     this.random = random;
     this.onDamage = onDamage;
     this.onKill = onKill;
+    this.resolveMuzzle = resolveMuzzle;
 
     this.triggerWasHeld = new Map();
 
@@ -134,10 +135,14 @@ export class WeaponSystem {
     fighter.getEyePosition(scratchOrigin);
     fighter.getAimDirection(scratchAim);
 
-    scratchMuzzle
-      .copy(scratchOrigin)
-      .addScaledVector(scratchAim, MUZZLE_FORWARD_OFFSET);
-    scratchMuzzle.y -= MUZZLE_DOWN_OFFSET;
+    // The local player's flash comes off the actual barrel tip of the view
+    // model. Bots have no view model, so they keep the approximation.
+    if (!this.resolveMuzzle(fighter, scratchMuzzle)) {
+      scratchMuzzle
+        .copy(scratchOrigin)
+        .addScaledVector(scratchAim, MUZZLE_FORWARD_OFFSET);
+      scratchMuzzle.y -= MUZZLE_DOWN_OFFSET;
+    }
 
     this.effects.spawnMuzzleFlash(scratchMuzzle, scratchAim);
 

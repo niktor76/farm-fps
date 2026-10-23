@@ -419,6 +419,7 @@ export const BINDABLE_ACTIONS = [
   { action: 'sprint', label: 'Sprint' },
   { action: 'crouch', label: 'Crouch' },
   { action: 'fire', label: 'Fire' },
+  { action: 'aim', label: 'Aim' },
   { action: 'reload', label: 'Reload' },
   { action: 'turnLeft', label: 'Turn left' },
   { action: 'turnRight', label: 'Turn right' },
@@ -437,6 +438,7 @@ export const DEFAULT_KEY_BINDINGS = {
   sprint: ['ShiftLeft', 'ShiftRight'],
   crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
   fire: [],
+  aim: [],
   reload: ['KeyR'],
   turnLeft: ['ArrowLeft', 'KeyQ'],
   turnRight: ['ArrowRight', 'KeyE'],
@@ -446,3 +448,22 @@ export const DEFAULT_KEY_BINDINGS = {
 };
 
 export const WEAPON_SLOT_KEY_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
+
+/**
+ * Aiming down the sights. Holding aim trades mobility for a tighter cone and a
+ * narrower field of view. Melee weapons cannot aim.
+ */
+export const AIM = {
+  spreadMultiplier: 0.3,
+  movementSpreadMultiplier: 0.55,
+  fieldOfViewMultiplier: 0.72,
+  sensitivityMultiplier: 0.65,
+  movementSpeedMultiplier: 0.5,
+  transitionSeconds: 0.14,
+  sprintCancelsAim: true
+};
+
+/** Per-weapon override of AIM.spreadMultiplier, for weapons that should gain less. */
+export const AIM_SPREAD_OVERRIDES = {
+  shotgun: 0.75
+};

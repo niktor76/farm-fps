@@ -14,6 +14,9 @@ import { INPUT, DEFAULT_KEY_BINDINGS, WEAPON_SLOT_KEY_CODES } from './config/tun
  * Owned by PH-2-player, extended by PH-13-trackpad and PH-14-bindings.
  */
 
+/** Mouse buttons drive these actions directly, alongside any key bound to them. */
+const ACTION_BY_MOUSE_BUTTON = { 0: 'fire', 2: 'aim' };
+
 const WEAPON_SLOT_BY_KEY_CODE = Object.fromEntries(
   WEAPON_SLOT_KEY_CODES.map((keyCode, slot) => [keyCode, slot])
 );
@@ -74,17 +77,24 @@ export class Input {
     };
 
     this.onMouseDown = (event) => {
-      if (event.button !== 0) return;
+      const action = ACTION_BY_MOUSE_BUTTON[event.button];
+      if (action === undefined) return;
       // Not while unlocked: that click is the one re-acquiring pointer lock,
       // and it would otherwise fire a shot before the lock is even granted.
       if (!this.enabled || !this.locked) return;
-      this.downActions.add('fire');
-      this.pressedActions.add('fire');
+      this.downActions.add(action);
+      this.pressedActions.add(action);
     };
 
     this.onMouseUp = (event) => {
-      if (event.button !== 0) return;
-      this.downActions.delete('fire');
+      const action = ACTION_BY_MOUSE_BUTTON[event.button];
+      if (action === undefined) return;
+      this.downActions.delete(action);
+    };
+
+    // Right button aims, so its menu would otherwise open over the game.
+    this.onContextMenu = (event) => {
+      event.preventDefault();
     };
 
     this.onMouseMove = (event) => {
@@ -110,6 +120,7 @@ export class Input {
       [window, 'mouseup', this.onMouseUp],
       [document, 'mousemove', this.onMouseMove],
       [canvas, 'wheel', this.onWheel],
+      [canvas, 'contextmenu', this.onContextMenu],
       [document, 'pointerlockchange', this.onPointerLockChange]
     ];
 
@@ -227,7 +238,7 @@ export class Input {
     return target;
   }
 
-  /** @param {'forward'|'back'|'left'|'right'|'jump'|'sprint'|'crouch'|'fire'|'reload'|'scoreboard'|'turnLeft'|'turnRight'|'lookUp'|'lookDown'} action */
+  /** @param {'forward'|'back'|'left'|'right'|'jump'|'sprint'|'crouch'|'fire'|'aim'|'reload'|'scoreboard'|'turnLeft'|'turnRight'|'lookUp'|'lookDown'} action */
   isDown(action) {
     return this.downActions.has(action);
   }

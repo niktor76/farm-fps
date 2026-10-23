@@ -1,4 +1,4 @@
-import { FIGHTER, STAMINA } from '../config/tunables.js';
+import { FIGHTER, STAMINA, MOVEMENT_ACCURACY } from '../config/tunables.js';
 
 const KILL_FEED_ENTRY_LIFETIME_SECONDS = 5;
 const KILL_FEED_ENTRY_FADE_SECONDS = 1;
@@ -7,6 +7,8 @@ const LOW_HEALTH_FRACTION = 0.35;
 const STAMINA_READY_PERCENT = Math.ceil(
   (STAMINA.minimumSecondsToStartSprint / STAMINA.maximumSeconds) * 100
 );
+/** How far the crosshair lines travel outward at the full movement penalty. */
+const CROSSHAIR_MAXIMUM_SPREAD_PIXELS = 10;
 const TIMER_URGENT_SECONDS = 30;
 const HITMARKER_VISIBLE_SECONDS = 0.25;
 const DAMAGE_FLASH_VISIBLE_SECONDS = 0.5;
@@ -39,6 +41,8 @@ export class Hud {
     this.damageFlashTimeoutHandle = null;
 
     this.previousState = {
+      aimPercent: null,
+      crosshairSpreadPixels: null,
       health: null,
       staminaPercent: null,
       magazine: null,
@@ -77,6 +81,7 @@ export class Hud {
     crosshair.appendChild(dot);
     crosshair.appendChild(this.hitmarkerElement);
 
+    this.crosshairElement = crosshair;
     return crosshair;
   }
 
@@ -198,11 +203,30 @@ export class Hud {
    *   magazine: number, magazineSize: number,
    *   weaponLabel: string, reloading: boolean,
    *   secondsRemaining: number, kills: number,
-   *   alive: boolean, respawnSecondsRemaining: number
+   *   alive: boolean, respawnSecondsRemaining: number,
+   *   aimFraction: number, movementSpread: number
    * }} state
    */
   update(state) {
     const previous = this.previousState;
+
+    const aimPercent = Math.round(state.aimFraction * 100);
+    if (aimPercent !== previous.aimPercent) {
+      this.crosshairElement.style.setProperty('--hud-crosshair-aim', String(aimPercent / 100));
+      previous.aimPercent = aimPercent;
+    }
+
+    const crosshairSpreadPixels = Math.round(
+      Math.min(1, state.movementSpread / MOVEMENT_ACCURACY.maximumAddedSpread) *
+        CROSSHAIR_MAXIMUM_SPREAD_PIXELS
+    );
+    if (crosshairSpreadPixels !== previous.crosshairSpreadPixels) {
+      this.crosshairElement.style.setProperty(
+        '--hud-crosshair-spread',
+        `${crosshairSpreadPixels}px`
+      );
+      previous.crosshairSpreadPixels = crosshairSpreadPixels;
+    }
 
     if (state.health !== previous.health) {
       const clampedHealth = Math.max(0, Math.min(FIGHTER.maximumHealth, state.health));

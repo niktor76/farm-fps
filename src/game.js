@@ -93,7 +93,8 @@ export class Game {
       audio: this.audio,
       random: this.random,
       onDamage: (target, amount, attacker) => this.applyDamage(target, amount, attacker),
-      onKill: (victim, killer, weapon) => this.registerKill(victim, killer, weapon)
+      onKill: (victim, killer, weapon) => this.registerKill(victim, killer, weapon),
+      resolveMuzzle: (fighter, target) => this.resolveMuzzle(fighter, target)
     });
 
     this.spawn(this.player);
@@ -204,6 +205,17 @@ export class Game {
       this.viewModel.setWeapon(fighter.currentWeapon.id);
     }
     this.audio.play('spawn', fighter.isBot ? { position: fighter.position } : undefined);
+  }
+
+  /**
+   * The player's muzzle is the barrel tip of the view model, so the flash and
+   * the tracer leave the gun the player can actually see. Bots have no view
+   * model, so they fall back to the weapon system's approximation.
+   */
+  resolveMuzzle(fighter, target) {
+    if (fighter !== this.player) return false;
+    this.viewModel.getMuzzleWorldPosition(target);
+    return true;
   }
 
   applyDamage(target, amount, attacker) {

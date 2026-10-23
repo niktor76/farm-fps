@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Fighter, createIntent } from './fighter.js';
-import { CAMERA, INPUT } from '../config/tunables.js';
+import { CAMERA, INPUT, AIM } from '../config/tunables.js';
 
 const scratchLookDelta = new THREE.Vector2();
 const scratchEyePosition = new THREE.Vector3();
@@ -11,6 +11,7 @@ const VIEW_BOB_CYCLES_PER_METRE = 0.55;
 const VIEW_BOB_VERTICAL_METRES = 0.025;
 const VIEW_BOB_LATERAL_METRES = 0.018;
 const VIEW_BOB_CROUCH_DAMPING = 0.6;
+const VIEW_BOB_AIM_DAMPING = 0.7;
 const VIEW_BOB_SMOOTHING_PER_SECOND = 9;
 
 /**
@@ -57,6 +58,11 @@ export class Player extends Fighter {
     this.yaw = ((((this.yaw + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
   }
 
+  /** Look steadies as the weapon comes up, so aiming is not merely a zoom. */
+  get lookSensitivityMultiplier() {
+    return THREE.MathUtils.lerp(1, AIM.sensitivityMultiplier, this.aimFraction);
+  }
+
   /** @param {number} degreesPerSecond */
   setKeyboardTurnSpeed(degreesPerSecond) {
     this.keyboardYawRadiansPerSecond = THREE.MathUtils.degToRad(degreesPerSecond);
@@ -74,14 +80,18 @@ export class Player extends Fighter {
     this.applyLook(
       turn * this.keyboardYawRadiansPerSecond * multiplier * deltaSeconds,
       tilt * this.keyboardPitchRadiansPerSecond * multiplier * deltaSeconds,
-      1
+      this.lookSensitivityMultiplier
     );
   }
 
   /** Reads input, builds the movement intent, and steps the fighter. */
   update(deltaSeconds, collisionWorld) {
     this.input.consumeLookDelta(scratchLookDelta, deltaSeconds);
-    this.applyLook(scratchLookDelta.x, scratchLookDelta.y, this.sensitivity);
+    this.applyLook(
+      scratchLookDelta.x,
+      scratchLookDelta.y,
+      this.sensitivity * this.lookSensitivityMultiplier
+    );
     this.applyKeyboardLook(deltaSeconds);
 
     const intent = this.intent;
@@ -90,6 +100,7 @@ export class Player extends Fighter {
     intent.wantsJump = this.input.isDown('jump');
     intent.wantsSprint = this.input.isDown('sprint');
     intent.wantsCrouch = this.input.isDown('crouch');
+    intent.wantsAim = this.input.isDown('aim');
 
     this.step(deltaSeconds, collisionWorld, intent);
     this.updateViewBob(deltaSeconds);
@@ -98,7 +109,9 @@ export class Player extends Fighter {
   updateViewBob(deltaSeconds) {
     const walking = this.alive && this.onGround ? this.horizontalSpeed / this.feel.walkSpeed : 0;
     const targetAmplitude =
-      Math.min(walking, 1) * (1 - this.crouchAmount * VIEW_BOB_CROUCH_DAMPING);
+      Math.min(walking, 1) *
+      (1 - this.crouchAmount * VIEW_BOB_CROUCH_DAMPING) *
+      (1 - this.aimFraction * VIEW_BOB_AIM_DAMPING);
 
     const blend = Math.min(1, deltaSeconds * VIEW_BOB_SMOOTHING_PER_SECOND);
     this.viewBobAmplitude += (targetAmplitude - this.viewBobAmplitude) * blend;
@@ -120,5 +133,17 @@ export class Player extends Fighter {
 
     this.camera.position.copy(scratchEyePosition);
     this.camera.rotation.set(this.pitch + this.recoilPitch, this.yaw + this.recoilYaw, 0);
+
+    // Only fov is touched here; Game.resize owns aspect, so neither overwrites
+    // the other's value and the matrix is rebuilt only while the zoom moves.
+    const fieldOfView = THREE.MathUtils.lerp(
+      CAMERA.fieldOfView,
+      CAMERA.fieldOfView * AIM.fieldOfViewMultiplier,
+      this.aimFraction
+    );
+    if (this.camera.fov !== fieldOfView) {
+      this.camera.fov = fieldOfView;
+      this.camera.updateProjectionMatrix();
+    }
   }
 }

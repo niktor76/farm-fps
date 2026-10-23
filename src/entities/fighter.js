@@ -5,6 +5,8 @@ import {
   SIMULATION,
   STAMINA,
   MOVEMENT_ACCURACY,
+  AIM,
+  AIM_SPREAD_OVERRIDES,
   FEEL_PRESETS,
   resolveWeapons,
   jumpLaunchVelocity
@@ -56,10 +58,12 @@ export class Fighter {
     this.movementSpread = 0;
     this.recoilPitch = 0;
     this.recoilYaw = 0;
+    this.aimFraction = 0;
 
     this.staminaSeconds = STAMINA.maximumSeconds;
     this.secondsSinceSprintStopped = 0;
     this.sprintAllowed = true;
+    this.sprinting = false;
 
     this.jumpVelocity = jumpLaunchVelocity(feelKey);
     this.distanceTravelled = 0;
@@ -98,8 +102,14 @@ export class Fighter {
   }
 
   get effectiveSpread() {
-    if (this.currentWeapon.kind !== 'gun') return 0;
-    return this.currentSpread + this.movementSpread;
+    const weapon = this.currentWeapon;
+    if (weapon.kind !== 'gun') return 0;
+
+    const aimedMultiplier = AIM_SPREAD_OVERRIDES[weapon.id] ?? AIM.spreadMultiplier;
+    return (
+      (this.currentSpread + this.movementSpread) *
+      THREE.MathUtils.lerp(1, aimedMultiplier, this.aimFraction)
+    );
   }
 
   getEyePosition(target) {
@@ -171,9 +181,11 @@ export class Fighter {
     this.movementSpread = 0;
     this.recoilPitch = 0;
     this.recoilYaw = 0;
+    this.aimFraction = 0;
     this.staminaSeconds = STAMINA.maximumSeconds;
     this.secondsSinceSprintStopped = 0;
     this.sprintAllowed = true;
+    this.sprinting = false;
     this.magazines = this.weapons.map((weapon) =>
       weapon.kind === 'gun' ? weapon.magazineSize : 0
     );
@@ -194,6 +206,7 @@ export class Fighter {
 
     this.updateCrouch(deltaSeconds, collisionWorld, intent.wantsCrouch);
     this.updateStamina(deltaSeconds, intent);
+    this.updateAim(deltaSeconds, intent);
     this.updateRecoil(deltaSeconds);
     this.updateMovementSpread(deltaSeconds);
     this.applyAcceleration(deltaSeconds, intent);
@@ -255,13 +268,13 @@ export class Fighter {
       ? this.staminaSeconds > 0
       : this.staminaSeconds >= STAMINA.minimumSecondsToStartSprint;
 
-    const sprinting =
+    this.sprinting =
       this.sprintAllowed &&
       intent.wantsSprint &&
       intent.forward > 0 &&
       this.crouchAmount <= 0.5;
 
-    if (sprinting) {
+    if (this.sprinting) {
       this.staminaSeconds = Math.max(
         0,
         this.staminaSeconds - STAMINA.drainPerSecond * deltaSeconds
@@ -279,6 +292,21 @@ export class Fighter {
     );
   }
 
+  /**
+   * Eases toward the aim wish over AIM.transitionSeconds. A sprint drops the
+   * aim rather than being blocked by it, so the sprint key always sprints.
+   */
+  updateAim(deltaSeconds, intent) {
+    const wantsAim =
+      intent.wantsAim &&
+      this.currentWeapon.kind === 'gun' &&
+      !(AIM.sprintCancelsAim && this.sprinting);
+
+    const rate = deltaSeconds / AIM.transitionSeconds;
+    const target = wantsAim ? 1 : 0;
+    this.aimFraction += THREE.MathUtils.clamp(target - this.aimFraction, -rate, rate);
+  }
+
   updateMovementSpread(deltaSeconds) {
     const speedRatio = THREE.MathUtils.clamp(
       (this.horizontalSpeed - MOVEMENT_ACCURACY.forgivenSpeed) /
@@ -290,6 +318,7 @@ export class Fighter {
     let target = speedRatio * MOVEMENT_ACCURACY.maximumAddedSpread;
     if (!this.onGround) target += MOVEMENT_ACCURACY.airborneAddedSpread;
     target *= THREE.MathUtils.lerp(1, MOVEMENT_ACCURACY.crouchMultiplier, this.crouchAmount);
+    target *= THREE.MathUtils.lerp(1, AIM.movementSpreadMultiplier, this.aimFraction);
 
     if (target >= this.movementSpread) {
       this.movementSpread = target;
@@ -347,11 +376,16 @@ export class Fighter {
   }
 
   targetSpeed(intent) {
-    if (this.crouchAmount > 0.5) return this.feel.crouchSpeed;
-    if (this.sprintAllowed && intent.wantsSprint && intent.forward > 0) {
-      return this.feel.sprintSpeed;
+    let speed;
+    if (this.crouchAmount > 0.5) {
+      speed = this.feel.crouchSpeed;
+    } else if (this.sprintAllowed && intent.wantsSprint && intent.forward > 0) {
+      speed = this.feel.sprintSpeed;
+    } else {
+      speed = this.feel.walkSpeed;
     }
-    return this.feel.walkSpeed;
+
+    return speed * THREE.MathUtils.lerp(1, AIM.movementSpeedMultiplier, this.aimFraction);
   }
 
   integrateSubstep(substepSeconds, collisionWorld) {
@@ -407,6 +441,7 @@ export function createIntent() {
     right: 0,
     wantsJump: false,
     wantsSprint: false,
-    wantsCrouch: false
+    wantsCrouch: false,
+    wantsAim: false
   };
 }

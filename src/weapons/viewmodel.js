@@ -63,6 +63,24 @@ const REST_TRANSFORMS = {
   pitchfork: { position: [0.22, -0.26, -0.4], rotation: [-0.04, -0.1, 0.1], scale: 0.8 }
 };
 
+/**
+ * Where a shot leaves each model, in the model's own unscaled geometry space —
+ * the same coordinates the build functions below pass to `part`, so these read
+ * straight off the frontmost barrel piece. The melee entries are effect origins
+ * rather than muzzles: the karambit's outermost blade segment and the centre
+ * tine of the pitchfork.
+ *
+ * `pitchX` tilts the anchor so its local -Z follows what the weapon points
+ * along; only the karambit's blade leaves the bore axis.
+ */
+const MUZZLE_ANCHORS = {
+  pistol: { position: [0, 0.005, -0.18], pitchX: 0 },
+  rifle: { position: [0, 0.012, -0.685], pitchX: 0 },
+  shotgun: { position: [0, 0.024, -0.7], pitchX: 0 },
+  karambit: { position: [0, 0.0779, -0.1416], pitchX: 1.25 },
+  pitchfork: { position: [0, 0, -1.12], pitchX: 0 }
+};
+
 export class ViewModel {
   /**
    * @param {import('three').PerspectiveCamera} camera
@@ -86,6 +104,7 @@ export class ViewModel {
     };
 
     this.models = new Map();
+    this.muzzleAnchors = new Map();
     for (const weaponId of Object.keys(builders)) {
       const model = mergeByMaterial(builders[weaponId](viewMaterials), false, true);
       model.scale.setScalar(REST_TRANSFORMS[weaponId].scale);
@@ -94,11 +113,20 @@ export class ViewModel {
         mesh.renderOrder = RENDER_ORDER;
         mesh.frustumCulled = false;
       }
+
+      const anchorDefinition = MUZZLE_ANCHORS[weaponId];
+      const anchor = new THREE.Object3D();
+      anchor.position.fromArray(anchorDefinition.position);
+      anchor.rotation.x = anchorDefinition.pitchX;
+      model.add(anchor);
+      this.muzzleAnchors.set(weaponId, anchor);
+
       this.group.add(model);
       this.models.set(weaponId, model);
     }
 
     this.activeModel = null;
+    this.activeMuzzleAnchor = null;
     this.restTransform = REST_TRANSFORMS.pistol;
 
     this.bobAmplitude = 0;
@@ -120,7 +148,47 @@ export class ViewModel {
     if (this.activeModel) this.activeModel.visible = false;
     this.activeModel = this.models.get(weaponId);
     this.activeModel.visible = true;
+    this.activeMuzzleAnchor = this.muzzleAnchors.get(weaponId);
     this.restTransform = REST_TRANSFORMS[weaponId];
+  }
+
+  hasMuzzleAnchor() {
+    return this.activeMuzzleAnchor !== null;
+  }
+
+  /**
+   * World position of the active weapon's muzzle, carrying every offset
+   * `update` applied: pose, bob, sway, crouch, sprint drop, fire kick, reload
+   * dip and melee sweep.
+   *
+   * `updateWorldMatrix(true, false)` walks the camera -> group -> model -> anchor
+   * chain and recomposes each local matrix from its current position/rotation,
+   * so the result is this frame's transform rather than the one three.js last
+   * flushed during render.
+   *
+   * The view model shares the scene's camera and projection, so this point
+   * projects to the pixel the barrel tip is drawn at — usable as a world-space
+   * effect origin without any correction along the aim direction.
+   *
+   * @param {import('three').Vector3} target
+   */
+  getMuzzleWorldPosition(target) {
+    const anchor = this.activeMuzzleAnchor;
+    anchor.updateWorldMatrix(true, false);
+    return target.setFromMatrixPosition(anchor.matrixWorld);
+  }
+
+  /**
+   * The direction the active weapon points, in world space. Normalised because
+   * the models carry a non-unit scale.
+   *
+   * @param {import('three').Vector3} target
+   */
+  getMuzzleWorldDirection(target) {
+    const anchor = this.activeMuzzleAnchor;
+    anchor.updateWorldMatrix(true, false);
+    const elements = anchor.matrixWorld.elements;
+    return target.set(-elements[8], -elements[9], -elements[10]).normalize();
   }
 
   update(deltaSeconds, fighter) {
