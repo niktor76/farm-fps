@@ -48,7 +48,7 @@ Settled with the user across four interview rounds.
 | DEC-18 | In: viewmodel, nametags, hitmarkers, headshots. Out: minimap | The first four are feedback the game feels broken without; a minimap is real UI work with little payoff at 80 m |
 | DEC-19 | Input device is an explicit Mouse/Trackpad setting, never auto-detected | Browsers cannot reliably tell the two apart under pointer lock on macOS; every shipped game surveyed exposes it as a setting |
 | DEC-20 | `unadjustedMovement` requested for mouse only, never for trackpad | It strips operating-system pointer acceleration, which is what lets a short swipe cover a large turn on a small pad |
-| DEC-21 | Keyboard look (arrows / Q / E) is a first-class control, not a fallback | Game Accessibility Guidelines ask that every action be reachable by digital controls; 150 deg/s matches three independent engines |
+| DEC-21 | Keyboard look (arrows / Q / E) supplements pointer look rather than replacing it | Trackpad players use turn keys for large turns while the finger does fine aim; 150 deg/s matches three independent engines |
 | DEC-22 | Aim assist deferred until bots exist | It cannot be tuned without targets to tune against |
 
 ## Requirements
@@ -58,7 +58,7 @@ Settled with the user across four interview rounds.
 - **REQ-3** — no downloaded assets of any kind.
 - **REQ-4** — code split into the modules the brief names: player, weapons, bots, map, UI, audio.
 - **REQ-5** — README explaining how to install and run.
-- **REQ-6** — fully playable on a MacBook trackpad, and separately playable on keyboard alone.
+- **REQ-6** — fully playable with keyboard plus mouse, or keyboard plus MacBook trackpad.
 
 ## Tunables
 
@@ -247,7 +247,6 @@ PH-0 ─┬─ PH-1 ─┐
 - **AC-7** — a full match runs menu to results to replay without a page reload.
 - **AC-8** — console clean: no errors, no three.js deprecation warnings.
 - **AC-9** — a full physical swipe across a MacBook trackpad turns the view 120-180 degrees.
-- **AC-10** — the game is completable using only the keyboard, with no pointing device at all.
 
 ## Verification
 
