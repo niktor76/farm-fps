@@ -198,6 +198,7 @@ export class Bot extends Fighter {
    *
    * @param {{
    *   collisionWorld: import('../world/collision.js').CollisionWorld,
+   *   concealment: import('../world/concealment.js').ConcealmentField,
    *   waypoints: import('../world/waypoints.js').WaypointGraph,
    *   fighters: import('./fighter.js').Fighter[],
    *   weapons: import('../weapons/weapons.js').WeaponSystem,
@@ -244,7 +245,7 @@ export class Bot extends Fighter {
   }
 
   perceive(context) {
-    const { collisionWorld, fighters, elapsed } = context;
+    const { collisionWorld, concealment, fighters, elapsed } = context;
 
     this.getEyePosition(scratchEye);
 
@@ -269,6 +270,7 @@ export class Bot extends Fighter {
 
       fighter.getEyePosition(scratchTargetEye);
       if (collisionWorld.isBlocked(scratchEye, scratchTargetEye)) continue;
+      if (concealment.blocksSightBetween(scratchEye, fighter)) continue;
 
       best = fighter;
       bestDistance = distance;

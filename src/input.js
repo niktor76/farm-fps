@@ -1,4 +1,4 @@
-import { INPUT } from './config/tunables.js';
+import { INPUT, DEFAULT_KEY_BINDINGS, WEAPON_SLOT_KEY_CODES } from './config/tunables.js';
 
 /**
  * Keyboard and pointer input behind pointer lock.
@@ -8,51 +8,35 @@ import { INPUT } from './config/tunables.js';
  * rather than a detection. Chrome refuses an automatic re-lock immediately
  * after the user presses Escape, so re-locking requires a fresh click.
  *
- * Owned by PH-2-player, extended by PH-13-trackpad.
+ * The key lookup is built from the player's bindings rather than being fixed,
+ * so a rebound key takes effect on the live instance.
+ *
+ * Owned by PH-2-player, extended by PH-13-trackpad and PH-14-bindings.
  */
 
-const ACTION_BY_KEY_CODE = {
-  KeyW: 'forward',
-  KeyS: 'back',
-  KeyA: 'left',
-  KeyD: 'right',
-  Space: 'jump',
-  ShiftLeft: 'sprint',
-  ShiftRight: 'sprint',
-  ControlLeft: 'crouch',
-  ControlRight: 'crouch',
-  KeyC: 'crouch',
-  KeyR: 'reload',
-  KeyF: 'fire',
-  Tab: 'scoreboard',
-  ArrowLeft: 'turnLeft',
-  ArrowRight: 'turnRight',
-  ArrowUp: 'lookUp',
-  ArrowDown: 'lookDown',
-  KeyQ: 'turnLeft',
-  KeyE: 'turnRight'
-};
+const WEAPON_SLOT_BY_KEY_CODE = Object.fromEntries(
+  WEAPON_SLOT_KEY_CODES.map((keyCode, slot) => [keyCode, slot])
+);
 
-const WEAPON_SLOT_BY_KEY_CODE = {
-  Digit1: 0,
-  Digit2: 1,
-  Digit3: 2,
-  Digit4: 3,
-  Digit5: 4
-};
-
-const SWALLOWED_KEY_CODES = new Set([
+/**
+ * Keys the browser acts on itself: scrolling the page or moving focus. Only
+ * the ones actually bound are swallowed, so unbinding a key hands it back.
+ */
+const BROWSER_DEFAULT_KEY_CODES = [
   'Space',
   'Tab',
   'ArrowLeft',
   'ArrowRight',
   'ArrowUp',
   'ArrowDown'
-]);
+];
 
 export class Input {
-  /** @param {HTMLCanvasElement} canvas */
-  constructor(canvas) {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {Record<string, string[]>} [bindings] action to key codes
+   */
+  constructor(canvas, bindings = DEFAULT_KEY_BINDINGS) {
     this.canvas = canvas;
 
     this.deviceMode = INPUT.defaultDeviceMode;
@@ -60,6 +44,7 @@ export class Input {
 
     this.downActions = new Set();
     this.pressedActions = new Set();
+    this.setBindings(bindings);
     this.lookDeltaX = 0;
     this.lookDeltaY = 0;
     this.smoothedLookX = 0;
@@ -70,20 +55,20 @@ export class Input {
 
     this.onKeyDown = (event) => {
       if (!this.enabled) return;
-      if (SWALLOWED_KEY_CODES.has(event.code)) event.preventDefault();
+      if (this.swallowedKeyCodes.has(event.code)) event.preventDefault();
       if (event.repeat) return;
 
       const slot = WEAPON_SLOT_BY_KEY_CODE[event.code];
       if (slot !== undefined) this.weaponSlotRequest = slot;
 
-      const action = ACTION_BY_KEY_CODE[event.code];
+      const action = this.actionByKeyCode[event.code];
       if (action === undefined) return;
       this.downActions.add(action);
       this.pressedActions.add(action);
     };
 
     this.onKeyUp = (event) => {
-      const action = ACTION_BY_KEY_CODE[event.code];
+      const action = this.actionByKeyCode[event.code];
       if (action === undefined) return;
       this.downActions.delete(action);
     };
@@ -131,6 +116,27 @@ export class Input {
     for (const [target, type, handler] of this.listeners) {
       target.addEventListener(type, handler, type === 'wheel' ? { passive: true } : undefined);
     }
+  }
+
+  /**
+   * Rebuilds the key lookup, and with it the set of keys whose browser default
+   * is suppressed. Keys held under the old bindings are released.
+   *
+   * @param {Record<string, string[]>} bindings action to key codes
+   */
+  setBindings(bindings) {
+    this.bindings = bindings;
+    this.actionByKeyCode = {};
+
+    for (const [action, keyCodes] of Object.entries(bindings)) {
+      for (const keyCode of keyCodes) this.actionByKeyCode[keyCode] = action;
+    }
+
+    this.swallowedKeyCodes = new Set(
+      BROWSER_DEFAULT_KEY_CODES.filter((keyCode) => keyCode in this.actionByKeyCode)
+    );
+
+    this.downActions.clear();
   }
 
   /** @param {'mouse'|'trackpad'} mode */

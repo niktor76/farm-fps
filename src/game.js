@@ -57,12 +57,13 @@ export class Game {
     this.farm = buildFarm({
       scene: this.scene,
       collisionWorld: this.collisionWorld,
-      random: this.random
+      random: this.random,
+      dayCycleKey: settings.dayCycleKey
     });
     this.spawnPoints = generateSpawnPoints(this.collisionWorld, this.random);
     this.waypoints = WaypointGraph.build(this.collisionWorld, this.random, this.farm.coverPoints);
 
-    this.input = new Input(canvas);
+    this.input = new Input(canvas, settings.keyBindings);
     this.input.setDeviceMode(settings.deviceMode);
     this.hud = new Hud(uiRoot);
     this.scoreboard = new Scoreboard(uiRoot);
@@ -104,6 +105,7 @@ export class Game {
       fighters: this.fighters,
       weapons: this.weapons,
       audio: this.audio,
+      concealment: this.farm.concealment,
       elapsed: 0
     };
 
@@ -116,7 +118,8 @@ export class Game {
       secondsRemaining: 0,
       kills: 0,
       alive: true,
-      respawnSecondsRemaining: 0
+      respawnSecondsRemaining: 0,
+      staminaFraction: 1
     };
 
     this.stats = new DebugStats();
@@ -308,6 +311,7 @@ export class Game {
     hudState.secondsRemaining = this.secondsRemaining;
     hudState.kills = this.player.kills;
     hudState.alive = this.player.alive;
+    hudState.staminaFraction = this.player.staminaFraction;
     hudState.respawnSecondsRemaining = Math.max(
       0,
       MATCH.respawnDelaySeconds - this.player.respawnTimer

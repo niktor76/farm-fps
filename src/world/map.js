@@ -12,7 +12,8 @@
  *   group: import('three').Group,
  *   materials: ReturnType<import('./materials.js').createMaterialLibrary>,
  *   lighting: ReturnType<import('./lighting.js').createLighting>,
- *   coverPoints: import('three').Vector3[]
+ *   coverPoints: import('three').Vector3[],
+ *   concealment: import('./concealment.js').ConcealmentField
  * }}
  */
 
@@ -20,12 +21,14 @@ import * as THREE from 'three';
 import { WORLD, FIGHTER } from '../config/tunables.js';
 import { createMaterialLibrary, createTexturedBox, scaleUvs, mergeByMaterial } from './materials.js';
 import { createLighting } from './lighting.js';
+import { ConcealmentField } from './concealment.js';
 import { createBarn, createGarage, createFarmhouse, createShed } from './buildings.js';
 import {
   createFence,
   createHayBales,
   createTractor,
   createCropRows,
+  createWheatPatches,
   createTrees,
   createOuterScenery
 } from './props.js';
@@ -44,9 +47,9 @@ const SHEDS = [
   { position: [-25, -14], rotation: Math.PI / 2, size: [5, 3, 4.5] }
 ];
 
-export function buildFarm({ scene, collisionWorld, random }) {
+export function buildFarm({ scene, collisionWorld, random, dayCycleKey }) {
   const materials = createMaterialLibrary();
-  const lighting = createLighting(scene);
+  const lighting = createLighting(scene, dayCycleKey);
 
   const group = new THREE.Group();
   group.name = 'farm';
@@ -57,6 +60,7 @@ export function buildFarm({ scene, collisionWorld, random }) {
   collisionWorld.addPlayBoundary();
 
   const coverPoints = [];
+  const concealment = new ConcealmentField();
 
   addStructure(group, collisionWorld, coverPoints, () => createBarn(materials, collisionWorld));
   addStructure(group, collisionWorld, coverPoints, () => createGarage(materials, collisionWorld));
@@ -70,6 +74,7 @@ export function buildFarm({ scene, collisionWorld, random }) {
   group.add(createHayBales(materials, collisionWorld, random));
   group.add(createCropRows(materials, random));
   group.add(createTrees(materials, collisionWorld, random));
+  group.add(createWheatPatches(materials, collisionWorld, concealment, random));
   group.add(createOuterScenery(materials, random));
 
   scene.add(group);
@@ -78,7 +83,8 @@ export function buildFarm({ scene, collisionWorld, random }) {
     group,
     materials,
     lighting,
-    coverPoints: coverPoints.filter((point) => isUsableCoverPoint(point, collisionWorld))
+    coverPoints: coverPoints.filter((point) => isUsableCoverPoint(point, collisionWorld)),
+    concealment
   };
 }
 

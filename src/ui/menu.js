@@ -5,7 +5,12 @@ import {
   FEEL_PRESETS,
   DEFAULT_FEEL,
   DEFAULT_DIFFICULTY,
-  AUDIO
+  AUDIO,
+  DAY_CYCLES,
+  DEFAULT_DAY_CYCLE,
+  BINDABLE_ACTIONS,
+  DEFAULT_KEY_BINDINGS,
+  WEAPON_SLOT_KEY_CODES
 } from '../config/tunables.js';
 
 const STORAGE_KEY = 'farm-fps-settings';
@@ -17,11 +22,12 @@ const FEEL_DESCRIPTIONS = {
 };
 
 /**
- * Start screen: play button, bot count slider, difficulty, feel preset, and
- * settings for input device, look sensitivity, keyboard turn speed and volume.
- * Settings persist in localStorage.
+ * Start screen: play button, bot count slider, difficulty, feel preset, time of
+ * day, rebindable keys, and settings for input device, look sensitivity,
+ * keyboard turn speed and volume. Settings persist in localStorage.
  *
- * Owned by PH-4-ui-shell, completed by PH-11-menu, extended by PH-13-trackpad.
+ * Owned by PH-4-ui-shell, completed by PH-11-menu, extended by PH-13-trackpad
+ * and PH-14-bindings.
  */
 export class Menu {
   /**
@@ -31,6 +37,7 @@ export class Menu {
   constructor(root, handlers) {
     this.handlers = handlers;
     this.settings = loadSettings();
+    this.capture = null;
 
     this.container = document.createElement('div');
     this.container.className = 'menu';
@@ -39,6 +46,7 @@ export class Menu {
     this.container.appendChild(this.buildBotCountSection());
     this.container.appendChild(this.buildDifficultySection());
     this.container.appendChild(this.buildFeelSection());
+    this.container.appendChild(this.buildDayCycleSection());
     this.container.appendChild(this.buildSettingsSection());
     this.container.appendChild(this.buildControlsSection());
     this.container.appendChild(this.buildPlaySection());
@@ -167,6 +175,41 @@ export class Menu {
         this.settings.feelKey = feelKey;
         for (const sibling of group.children) {
           sibling.classList.toggle('is-selected', sibling.dataset.key === feelKey);
+        }
+        this.persist();
+      });
+
+      group.appendChild(button);
+    }
+
+    section.appendChild(group);
+    return section;
+  }
+
+  buildDayCycleSection() {
+    const section = document.createElement('div');
+    section.className = 'menu-section';
+
+    const label = document.createElement('label');
+    label.className = 'menu-label';
+    label.textContent = 'Time of day';
+    section.appendChild(label);
+
+    const group = document.createElement('div');
+    group.className = 'menu-segmented-group menu-segmented-group--wrapped';
+
+    for (const dayCycleKey of Object.keys(DAY_CYCLES)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'menu-segmented-button';
+      button.textContent = DAY_CYCLES[dayCycleKey].label;
+      button.dataset.key = dayCycleKey;
+      button.classList.toggle('is-selected', dayCycleKey === this.settings.dayCycleKey);
+
+      button.addEventListener('click', () => {
+        this.settings.dayCycleKey = dayCycleKey;
+        for (const sibling of group.children) {
+          sibling.classList.toggle('is-selected', sibling.dataset.key === dayCycleKey);
         }
         this.persist();
       });
@@ -353,32 +396,151 @@ export class Menu {
     heading.textContent = 'Controls';
     section.appendChild(heading);
 
-    const list = document.createElement('dl');
-    list.className = 'menu-controls-list';
+    this.bindingRows = new Map();
 
-    const entries = [
-      ['W A S D', 'Move'],
-      ['Arrows / Q E', 'Turn and look'],
-      ['Shift', 'Sprint, and turn faster'],
-      ['Space', 'Jump'],
-      ['Control / C', 'Crouch'],
-      ['Mouse / F', 'Fire'],
-      ['1-5 / Wheel', 'Switch weapon'],
-      ['R', 'Reload'],
-      ['Tab', 'Scoreboard']
-    ];
+    const list = document.createElement('div');
+    list.className = 'menu-binding-list';
+    for (const { action, label } of BINDABLE_ACTIONS) {
+      list.appendChild(this.buildBindingRow(action, label));
+    }
+    section.appendChild(list);
 
-    for (const [keys, action] of entries) {
-      const term = document.createElement('dt');
-      term.textContent = keys;
-      const description = document.createElement('dd');
-      description.textContent = action;
-      list.appendChild(term);
-      list.appendChild(description);
+    this.bindingMessage = document.createElement('p');
+    this.bindingMessage.className = 'menu-binding-message';
+    section.appendChild(this.bindingMessage);
+
+    const note = document.createElement('p');
+    note.className = 'menu-binding-note';
+    note.textContent = `${WEAPON_SLOT_KEY_CODES.map(formatKeyCode).join(' ')} and the mouse wheel switch weapons, the left mouse button fires. Those are fixed.`;
+    section.appendChild(note);
+
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.className = 'menu-binding-reset';
+    resetButton.textContent = 'Reset to defaults';
+    resetButton.addEventListener('click', () => {
+      this.cancelCapture();
+      this.settings.keyBindings = cloneBindings(DEFAULT_KEY_BINDINGS);
+      for (const action of this.bindingRows.keys()) this.refreshBindingRow(action);
+      this.bindingMessage.textContent = '';
+      this.persist();
+    });
+    section.appendChild(resetButton);
+
+    return section;
+  }
+
+  buildBindingRow(action, label) {
+    const row = document.createElement('div');
+    row.className = 'menu-binding-row';
+
+    const name = document.createElement('span');
+    name.className = 'menu-binding-label';
+    name.textContent = label;
+
+    const keys = document.createElement('span');
+    keys.className = 'menu-binding-keys';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'menu-binding-button';
+    button.textContent = 'Rebind';
+    button.addEventListener('click', () => this.startCapture(action));
+
+    row.appendChild(name);
+    row.appendChild(keys);
+    row.appendChild(button);
+
+    this.bindingRows.set(action, { row, keys, button });
+    this.refreshBindingRow(action);
+    return row;
+  }
+
+  refreshBindingRow(action) {
+    const { keys } = this.bindingRows.get(action);
+    const keyCodes = this.settings.keyBindings[action];
+
+    keys.textContent = keyCodes.length
+      ? keyCodes.map(formatKeyCode).join(' / ')
+      : KEYLESS_ACTION_LABELS[action] ?? 'Unbound';
+    keys.classList.toggle('is-keyless', keyCodes.length === 0);
+  }
+
+  /**
+   * The next keydown anywhere becomes the binding. The listener runs in the
+   * capture phase so the key never reaches the control it was pressed over.
+   */
+  startCapture(action) {
+    this.cancelCapture();
+    this.bindingMessage.textContent = '';
+
+    const { row, button } = this.bindingRows.get(action);
+    row.classList.add('is-capturing');
+    button.textContent = 'Press a key';
+
+    const onKeyDown = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.cancelCapture();
+      if (event.code === 'Escape') return;
+      this.applyBinding(action, event.code);
+    };
+
+    this.capture = { action, onKeyDown };
+    window.addEventListener('keydown', onKeyDown, true);
+  }
+
+  cancelCapture() {
+    if (!this.capture) return;
+
+    window.removeEventListener('keydown', this.capture.onKeyDown, true);
+    const { row, button } = this.bindingRows.get(this.capture.action);
+    row.classList.remove('is-capturing');
+    button.textContent = 'Rebind';
+    this.capture = null;
+  }
+
+  /**
+   * One key drives one action. A key taken from another action is removed
+   * there, unless it was that action's last key: an action with no key left
+   * could never be performed again, so the rebind is refused instead. The
+   * exception is an action in KEYLESS_ACTION_LABELS, which the mouse covers.
+   */
+  applyBinding(action, keyCode) {
+    const keyLabel = formatKeyCode(keyCode);
+
+    if (WEAPON_SLOT_KEY_CODES.includes(keyCode)) {
+      this.bindingMessage.textContent = `${keyLabel} switches weapons and cannot be rebound.`;
+      return;
     }
 
-    section.appendChild(list);
-    return section;
+    const bindings = this.settings.keyBindings;
+    const conflicting = BINDABLE_ACTIONS.find(
+      (entry) => entry.action !== action && bindings[entry.action].includes(keyCode)
+    );
+
+    const emptyingConflicting =
+      conflicting &&
+      bindings[conflicting.action].length === 1 &&
+      !(conflicting.action in KEYLESS_ACTION_LABELS);
+
+    if (emptyingConflicting) {
+      this.bindingMessage.textContent = `${keyLabel} is the only key for ${conflicting.label} and stays there.`;
+      return;
+    }
+
+    bindings[action] = [keyCode];
+
+    if (conflicting) {
+      bindings[conflicting.action] = bindings[conflicting.action].filter(
+        (boundKeyCode) => boundKeyCode !== keyCode
+      );
+      this.refreshBindingRow(conflicting.action);
+      this.bindingMessage.textContent = `${keyLabel} taken from ${conflicting.label}.`;
+    }
+
+    this.refreshBindingRow(action);
+    this.persist();
   }
 
   buildPlaySection() {
@@ -406,13 +568,42 @@ export class Menu {
   }
 
   hide() {
+    this.cancelCapture();
     this.container.classList.add('is-hidden');
   }
 
   /** @returns {MatchSettings} */
   getSettings() {
-    return { ...this.settings };
+    return { ...this.settings, keyBindings: cloneBindings(this.settings.keyBindings) };
   }
+}
+
+/**
+ * Actions that stay performable with no key bound, and what the controls list
+ * shows instead of a key. Fire is the only one: the mouse button always fires
+ * and is not rebindable, so an empty list is a valid state for it alone.
+ */
+const KEYLESS_ACTION_LABELS = { fire: 'Mouse click' };
+
+const MODIFIER_LABELS = { Shift: 'Shift', Control: 'Control', Alt: 'Alt', Meta: 'Command' };
+
+/** Turns a KeyboardEvent.code into something a player recognises on sight. */
+function formatKeyCode(keyCode) {
+  if (keyCode.startsWith('Key')) return keyCode.slice(3);
+  if (keyCode.startsWith('Digit')) return keyCode.slice(5);
+  if (keyCode.startsWith('Arrow')) return keyCode.slice(5);
+  if (keyCode.startsWith('Numpad')) return `Numpad ${keyCode.slice(6)}`;
+
+  const sided = /^(Shift|Control|Alt|Meta)(Left|Right)$/.exec(keyCode);
+  if (sided) return `${sided[2]} ${MODIFIER_LABELS[sided[1]]}`;
+
+  return keyCode.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function cloneBindings(bindings) {
+  return Object.fromEntries(
+    Object.entries(bindings).map(([action, keyCodes]) => [action, [...keyCodes]])
+  );
 }
 
 function sensitivityStep(device) {
@@ -468,8 +659,30 @@ function loadSettings() {
       INPUT.keyboardLook.maximumYawDegreesPerSecond
     ),
     volume: storedNumber(parsed.volume, AUDIO.defaultVolume, 0, 1),
-    showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : true
+    showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : true,
+    dayCycleKey: DAY_CYCLES[parsed.dayCycleKey] ? parsed.dayCycleKey : DEFAULT_DAY_CYCLE,
+    keyBindings: loadKeyBindings(parsed.keyBindings)
   };
+}
+
+/**
+ * An action falls back to its default unless it stored a list of key codes.
+ * The list may only be empty for an action the mouse covers on its own.
+ */
+function loadKeyBindings(stored) {
+  const bindings = {};
+
+  for (const action of Object.keys(DEFAULT_KEY_BINDINGS)) {
+    const keyCodes = stored?.[action];
+    const usable =
+      Array.isArray(keyCodes) &&
+      (keyCodes.length > 0 || action in KEYLESS_ACTION_LABELS) &&
+      keyCodes.every((keyCode) => typeof keyCode === 'string');
+
+    bindings[action] = usable ? [...keyCodes] : [...DEFAULT_KEY_BINDINGS[action]];
+  }
+
+  return bindings;
 }
 
 /**
@@ -481,6 +694,8 @@ function loadSettings() {
  *   sensitivity: number,
  *   keyboardTurnDegreesPerSecond: number,
  *   volume: number,
- *   showNametags: boolean
+ *   showNametags: boolean,
+ *   dayCycleKey: 'morning'|'noon'|'evening'|'night',
+ *   keyBindings: Record<string, string[]>
  * }} MatchSettings
  */

@@ -145,7 +145,7 @@ export class WeaponSystem {
     shot.shooter = fighter;
     shot.weapon = weapon;
 
-    const spread = Math.max(weapon.baseSpread, fighter.currentSpread);
+    const spread = Math.max(weapon.baseSpread, fighter.effectiveSpread);
 
     for (let pellet = 0; pellet < weapon.pelletCount; pellet += 1) {
       spreadDirection(scratchAim, spread, this.random, scratchDirection);
@@ -163,7 +163,10 @@ export class WeaponSystem {
       this.deliverDamage(fighter, result.target, result.damage, weapon);
     }
 
-    fighter.currentSpread = Math.min(weapon.maximumSpread, spread + weapon.spreadPerShot);
+    fighter.currentSpread = Math.min(
+      weapon.maximumSpread,
+      Math.max(weapon.baseSpread, fighter.currentSpread) + weapon.spreadPerShot
+    );
     fighter.recoilPitch += weapon.recoilVertical;
     fighter.recoilYaw += (this.random.next() * 2 - 1) * weapon.recoilHorizontal;
 

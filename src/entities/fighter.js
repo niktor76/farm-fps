@@ -3,6 +3,8 @@ import {
   FIGHTER,
   WORLD,
   SIMULATION,
+  STAMINA,
+  MOVEMENT_ACCURACY,
   FEEL_PRESETS,
   resolveWeapons,
   jumpLaunchVelocity
@@ -51,8 +53,13 @@ export class Fighter {
     this.reloadTimer = 0;
     this.reloading = false;
     this.currentSpread = 0;
+    this.movementSpread = 0;
     this.recoilPitch = 0;
     this.recoilYaw = 0;
+
+    this.staminaSeconds = STAMINA.maximumSeconds;
+    this.secondsSinceSprintStopped = 0;
+    this.sprintAllowed = true;
 
     this.jumpVelocity = jumpLaunchVelocity(feelKey);
     this.distanceTravelled = 0;
@@ -84,6 +91,15 @@ export class Fighter {
 
   get horizontalSpeed() {
     return Math.hypot(this.velocity.x, this.velocity.z);
+  }
+
+  get staminaFraction() {
+    return this.staminaSeconds / STAMINA.maximumSeconds;
+  }
+
+  get effectiveSpread() {
+    if (this.currentWeapon.kind !== 'gun') return 0;
+    return this.currentSpread + this.movementSpread;
   }
 
   getEyePosition(target) {
@@ -152,8 +168,12 @@ export class Fighter {
     this.reloadTimer = 0;
     this.cooldownTimer = 0;
     this.currentSpread = 0;
+    this.movementSpread = 0;
     this.recoilPitch = 0;
     this.recoilYaw = 0;
+    this.staminaSeconds = STAMINA.maximumSeconds;
+    this.secondsSinceSprintStopped = 0;
+    this.sprintAllowed = true;
     this.magazines = this.weapons.map((weapon) =>
       weapon.kind === 'gun' ? weapon.magazineSize : 0
     );
@@ -173,7 +193,9 @@ export class Fighter {
     }
 
     this.updateCrouch(deltaSeconds, collisionWorld, intent.wantsCrouch);
+    this.updateStamina(deltaSeconds, intent);
     this.updateRecoil(deltaSeconds);
+    this.updateMovementSpread(deltaSeconds);
     this.applyAcceleration(deltaSeconds, intent);
 
     if (intent.wantsJump && this.onGround) {
@@ -222,6 +244,64 @@ export class Fighter {
     this.recoilYaw -= THREE.MathUtils.clamp(this.recoilYaw, -recovery, recovery);
   }
 
+  /**
+   * Sprint endurance. `sprintAllowed` is the hysteresis gate: it only clears at
+   * zero and only returns once minimumSecondsToStartSprint has regenerated, so
+   * an exhausted fighter holding the sprint key does not stutter back into a
+   * sprint on every frame of trickle regeneration.
+   */
+  updateStamina(deltaSeconds, intent) {
+    this.sprintAllowed = this.sprintAllowed
+      ? this.staminaSeconds > 0
+      : this.staminaSeconds >= STAMINA.minimumSecondsToStartSprint;
+
+    const sprinting =
+      this.sprintAllowed &&
+      intent.wantsSprint &&
+      intent.forward > 0 &&
+      this.crouchAmount <= 0.5;
+
+    if (sprinting) {
+      this.staminaSeconds = Math.max(
+        0,
+        this.staminaSeconds - STAMINA.drainPerSecond * deltaSeconds
+      );
+      this.secondsSinceSprintStopped = 0;
+      return;
+    }
+
+    this.secondsSinceSprintStopped += deltaSeconds;
+    if (this.secondsSinceSprintStopped < STAMINA.regenerationDelaySeconds) return;
+
+    this.staminaSeconds = Math.min(
+      STAMINA.maximumSeconds,
+      this.staminaSeconds + STAMINA.regenerationPerSecond * deltaSeconds
+    );
+  }
+
+  updateMovementSpread(deltaSeconds) {
+    const speedRatio = THREE.MathUtils.clamp(
+      (this.horizontalSpeed - MOVEMENT_ACCURACY.forgivenSpeed) /
+        (this.feel.sprintSpeed - MOVEMENT_ACCURACY.forgivenSpeed),
+      0,
+      1
+    );
+
+    let target = speedRatio * MOVEMENT_ACCURACY.maximumAddedSpread;
+    if (!this.onGround) target += MOVEMENT_ACCURACY.airborneAddedSpread;
+    target *= THREE.MathUtils.lerp(1, MOVEMENT_ACCURACY.crouchMultiplier, this.crouchAmount);
+
+    if (target >= this.movementSpread) {
+      this.movementSpread = target;
+      return;
+    }
+
+    this.movementSpread = Math.max(
+      target,
+      this.movementSpread - MOVEMENT_ACCURACY.settleRatePerSecond * deltaSeconds
+    );
+  }
+
   applyAcceleration(deltaSeconds, intent) {
     const speed = this.targetSpeed(intent);
     const hasInput = intent.forward !== 0 || intent.right !== 0;
@@ -268,7 +348,9 @@ export class Fighter {
 
   targetSpeed(intent) {
     if (this.crouchAmount > 0.5) return this.feel.crouchSpeed;
-    if (intent.wantsSprint && intent.forward > 0) return this.feel.sprintSpeed;
+    if (this.sprintAllowed && intent.wantsSprint && intent.forward > 0) {
+      return this.feel.sprintSpeed;
+    }
     return this.feel.walkSpeed;
   }
 

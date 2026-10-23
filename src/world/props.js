@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { WORLD } from '../config/tunables.js';
+import { WORLD, FIGHTER, CONCEALMENT } from '../config/tunables.js';
 import { createTexturedBox, scaleUvs, mergeByMaterial } from './materials.js';
 
 const scratchMatrix = new THREE.Matrix4();
@@ -32,6 +32,15 @@ const STACKED_BALE_HEIGHT = 0.5;
 const CROP_HEIGHT = 0.45;
 const CROP_ROW_SPACING = 0.8;
 const CROP_PLANT_SPACING = 0.45;
+
+const WHEAT_STALK_RADIUS = 0.055;
+const WHEAT_STALK_SPACING = 0.35;
+const WHEAT_STALK_JITTER = 0.1;
+const WHEAT_STALK_LEAN = 0.16;
+const WHEAT_FENCE_MARGIN = 2;
+const WHEAT_CLEARANCE_RADIUS = 1;
+const WHEAT_CLEARANCE_SAMPLE_SPACING = 1.2;
+const WHEAT_PLACEMENT_ATTEMPTS = 400;
 
 export function createFence(materials, collisionWorld) {
   const extent = WORLD.playHalfExtent;
@@ -269,6 +278,105 @@ export function createCropRows(materials, random) {
   geometry.translate(0, CROP_HEIGHT / 2, 0);
 
   return buildInstancedMesh(geometry, materials.crop, plants, false, false);
+}
+
+/**
+ * Tall standing wheat: the only crop a crouched fighter can hide in.
+ *
+ * Registers concealment but no collision, so movement and bullets pass
+ * straight through. The whole set is one InstancedMesh regardless of patch
+ * count, which keeps the draw-call cost at one.
+ */
+export function createWheatPatches(materials, collisionWorld, concealmentField, random) {
+  const patches = [];
+  let attemptsLeft = WHEAT_PLACEMENT_ATTEMPTS;
+
+  while (patches.length < CONCEALMENT.patchCount) {
+    attemptsLeft -= 1;
+    if (attemptsLeft < 0) throw new Error('no free ground left for a wheat patch');
+
+    const sizeX = random.range(CONCEALMENT.minimumPatchExtent, CONCEALMENT.maximumPatchExtent);
+    const sizeZ = random.range(CONCEALMENT.minimumPatchExtent, CONCEALMENT.maximumPatchExtent);
+    const limitX = WORLD.playHalfExtent - sizeX / 2 - WHEAT_FENCE_MARGIN;
+    const limitZ = WORLD.playHalfExtent - sizeZ / 2 - WHEAT_FENCE_MARGIN;
+    const candidate = {
+      centerX: random.range(-limitX, limitX),
+      centerZ: random.range(-limitZ, limitZ),
+      sizeX,
+      sizeZ
+    };
+
+    if (overlapsAnyPatch(patches, candidate)) continue;
+    if (patchHitsGeometry(collisionWorld, candidate)) continue;
+
+    patches.push(candidate);
+  }
+
+  const stalks = [];
+
+  for (const patch of patches) {
+    concealmentField.addPatch(patch.centerX, patch.centerZ, patch.sizeX, patch.sizeZ);
+
+    const columns = Math.floor(patch.sizeX / WHEAT_STALK_SPACING);
+    const rows = Math.floor(patch.sizeZ / WHEAT_STALK_SPACING);
+    const originX = patch.centerX - (columns * WHEAT_STALK_SPACING) / 2;
+    const originZ = patch.centerZ - (rows * WHEAT_STALK_SPACING) / 2;
+
+    for (let column = 0; column < columns; column += 1) {
+      for (let row = 0; row < rows; row += 1) {
+        stalks.push({
+          x: originX + (column + 0.5) * WHEAT_STALK_SPACING + random.range(-WHEAT_STALK_JITTER, WHEAT_STALK_JITTER),
+          y: 0,
+          z: originZ + (row + 0.5) * WHEAT_STALK_SPACING + random.range(-WHEAT_STALK_JITTER, WHEAT_STALK_JITTER),
+          rotationY: random.range(0, Math.PI),
+          rotationZ: random.range(-WHEAT_STALK_LEAN, WHEAT_STALK_LEAN),
+          scaleX: random.range(0.85, 1.2),
+          scaleY: random.range(0.88, 1.12),
+          scaleZ: random.range(0.85, 1.2)
+        });
+      }
+    }
+  }
+
+  const geometry = new THREE.ConeGeometry(WHEAT_STALK_RADIUS, CONCEALMENT.cropHeight, 4, 1);
+  geometry.translate(0, CONCEALMENT.cropHeight / 2, 0);
+
+  return buildInstancedMesh(geometry, materials.hay, stalks, false, false);
+}
+
+function overlapsAnyPatch(patches, candidate) {
+  for (const patch of patches) {
+    const gapX = Math.abs(patch.centerX - candidate.centerX) - (patch.sizeX + candidate.sizeX) / 2;
+    const gapZ = Math.abs(patch.centerZ - candidate.centerZ) - (patch.sizeZ + candidate.sizeZ) / 2;
+    if (gapX < 0 && gapZ < 0) return true;
+  }
+
+  return false;
+}
+
+/** Samples the candidate rectangle on a grid; any standing-height obstruction rejects it. */
+function patchHitsGeometry(collisionWorld, candidate) {
+  const samplesX = Math.ceil(candidate.sizeX / WHEAT_CLEARANCE_SAMPLE_SPACING);
+  const samplesZ = Math.ceil(candidate.sizeZ / WHEAT_CLEARANCE_SAMPLE_SPACING);
+  const originX = candidate.centerX - candidate.sizeX / 2;
+  const originZ = candidate.centerZ - candidate.sizeZ / 2;
+
+  for (let stepX = 0; stepX <= samplesX; stepX += 1) {
+    const x = originX + (stepX / samplesX) * candidate.sizeX;
+    for (let stepZ = 0; stepZ <= samplesZ; stepZ += 1) {
+      const z = originZ + (stepZ / samplesZ) * candidate.sizeZ;
+      const hit = collisionWorld.overlapsAt(
+        x,
+        WORLD.groundLevel,
+        z,
+        WHEAT_CLEARANCE_RADIUS,
+        FIGHTER.standingHeight
+      );
+      if (hit) return true;
+    }
+  }
+
+  return false;
 }
 
 export function createTrees(materials, collisionWorld, random) {

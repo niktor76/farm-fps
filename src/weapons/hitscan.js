@@ -103,7 +103,9 @@ export function traceShot(shot) {
   }
 
   const base = damageAtDistance(weapon, nearest);
-  shotResult.damage = shotResult.isHeadshot ? base * weapon.headshotMultiplier : base;
+  shotResult.damage = shotResult.isHeadshot
+    ? base * weapon.headshotMultiplier
+    : base * (weapon.bodyDamageMultiplier ?? 1);
   return shotResult;
 }
 

@@ -145,6 +145,7 @@ const WEAPON_BASE = {
     label: 'Pistol',
     kind: 'gun',
     fireMode: 'semi',
+    bodyDamageMultiplier: 0.9,
     magazineSize: 12,
     reloadSeconds: 1.8,
     pelletCount: 1,
@@ -305,3 +306,143 @@ export const INPUT = {
     stepDegreesPerSecond: 5
   }
 };
+
+/**
+ * Sprint endurance. Stamina is held in seconds of remaining sprint, so the
+ * drain rate is 1 and the budget reads directly as the eleven seconds asked for.
+ */
+export const STAMINA = {
+  maximumSeconds: 11,
+  drainPerSecond: 1,
+  regenerationPerSecond: 0.55,
+  regenerationDelaySeconds: 1.2,
+  minimumSecondsToStartSprint: 3.5
+};
+
+/**
+ * Accuracy penalty for firing while moving. The cone grows with horizontal
+ * speed, so walking costs little and sprinting costs a lot; crouching cuts it.
+ */
+export const MOVEMENT_ACCURACY = {
+  forgivenSpeed: 1.2,
+  maximumAddedSpread: 0.055,
+  airborneAddedSpread: 0.07,
+  crouchMultiplier: 0.45,
+  settleRatePerSecond: 3.5
+};
+
+/**
+ * Standing crops tall enough to hide a crouched fighter. Concealment only
+ * breaks line of sight; bullets pass through, and someone standing is visible.
+ */
+export const CONCEALMENT = {
+  cropHeight: 1.35,
+  crouchAmountToConceal: 0.75,
+  revealDistance: 3.5,
+  patchCount: 7,
+  minimumPatchExtent: 7,
+  maximumPatchExtent: 13
+};
+
+/** Selectable lighting conditions. Night stays playable rather than realistic. */
+export const DAY_CYCLES = {
+  morning: {
+    label: 'Morning',
+    skyColor: 0xbcd9ee,
+    fogColor: 0xc3dcee,
+    fogNear: 70,
+    fogFar: 190,
+    sunColor: 0xffe9cc,
+    sunIntensity: 2.4,
+    sunElevationDegrees: 24,
+    sunAzimuthDegrees: 110,
+    skyLightColor: 0xcfe2f2,
+    groundLightColor: 0x5c4a28,
+    ambientIntensity: 1.2
+  },
+  noon: {
+    label: 'Midday',
+    skyColor: 0x9fc9e8,
+    fogColor: 0xa8cfe8,
+    fogNear: 85,
+    fogFar: 220,
+    sunColor: 0xfffaf0,
+    sunIntensity: 3.2,
+    sunElevationDegrees: 68,
+    sunAzimuthDegrees: 40,
+    skyLightColor: 0xbfd9ef,
+    groundLightColor: 0x53411f,
+    ambientIntensity: 1.15
+  },
+  evening: {
+    label: 'Golden hour',
+    skyColor: 0x9fc4e0,
+    fogColor: 0xd9c3a6,
+    fogNear: 62,
+    fogFar: 178,
+    sunColor: 0xfff2d8,
+    sunIntensity: 3,
+    sunElevationDegrees: 18,
+    sunAzimuthDegrees: 300,
+    skyLightColor: 0xbfd9ef,
+    groundLightColor: 0x53411f,
+    ambientIntensity: 1.1
+  },
+  night: {
+    label: 'Night',
+    skyColor: 0x121c2c,
+    fogColor: 0x16202f,
+    fogNear: 35,
+    fogFar: 120,
+    sunColor: 0xaec4e8,
+    sunIntensity: 0.85,
+    sunElevationDegrees: 42,
+    sunAzimuthDegrees: 215,
+    skyLightColor: 0x3d4f6b,
+    groundLightColor: 0x171c22,
+    ambientIntensity: 0.9
+  }
+};
+
+export const DEFAULT_DAY_CYCLE = 'evening';
+
+/**
+ * Rebindable actions. The order is the order the settings panel lists them in,
+ * and the codes are KeyboardEvent.code values so the layout does not matter.
+ */
+export const BINDABLE_ACTIONS = [
+  { action: 'forward', label: 'Move forward' },
+  { action: 'back', label: 'Move back' },
+  { action: 'left', label: 'Strafe left' },
+  { action: 'right', label: 'Strafe right' },
+  { action: 'jump', label: 'Jump' },
+  { action: 'sprint', label: 'Sprint' },
+  { action: 'crouch', label: 'Crouch' },
+  { action: 'fire', label: 'Fire' },
+  { action: 'reload', label: 'Reload' },
+  { action: 'turnLeft', label: 'Turn left' },
+  { action: 'turnRight', label: 'Turn right' },
+  { action: 'lookUp', label: 'Look up' },
+  { action: 'lookDown', label: 'Look down' },
+  { action: 'scoreboard', label: 'Scoreboard' }
+];
+
+/** Each action maps to a list of key codes, so an action can have alternatives. */
+export const DEFAULT_KEY_BINDINGS = {
+  forward: ['KeyW'],
+  back: ['KeyS'],
+  left: ['KeyA'],
+  right: ['KeyD'],
+  jump: ['Space'],
+  sprint: ['ShiftLeft', 'ShiftRight'],
+  crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
+  fire: [],
+  reload: ['KeyR'],
+  turnLeft: ['ArrowLeft', 'KeyQ'],
+  turnRight: ['ArrowRight', 'KeyE'],
+  lookUp: ['ArrowUp'],
+  lookDown: ['ArrowDown'],
+  scoreboard: ['Tab']
+};
+
+export const WEAPON_SLOT_KEY_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];

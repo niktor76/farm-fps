@@ -1,8 +1,12 @@
-import { FIGHTER } from '../config/tunables.js';
+import { FIGHTER, STAMINA } from '../config/tunables.js';
 
 const KILL_FEED_ENTRY_LIFETIME_SECONDS = 5;
 const KILL_FEED_ENTRY_FADE_SECONDS = 1;
 const LOW_HEALTH_FRACTION = 0.35;
+/** The stamina bar stays marked as exhausted until a sprint can be started again. */
+const STAMINA_READY_PERCENT = Math.ceil(
+  (STAMINA.minimumSecondsToStartSprint / STAMINA.maximumSeconds) * 100
+);
 const TIMER_URGENT_SECONDS = 30;
 const HITMARKER_VISIBLE_SECONDS = 0.25;
 const DAMAGE_FLASH_VISIBLE_SECONDS = 0.5;
@@ -36,6 +40,7 @@ export class Hud {
 
     this.previousState = {
       health: null,
+      staminaPercent: null,
       magazine: null,
       magazineSize: null,
       weaponLabel: null,
@@ -79,6 +84,13 @@ export class Hud {
     const section = document.createElement('div');
     section.className = 'hud-health';
 
+    this.staminaBarFillElement = document.createElement('div');
+    this.staminaBarFillElement.className = 'hud-health-bar-fill hud-stamina-bar-fill';
+
+    this.staminaBarTrackElement = document.createElement('div');
+    this.staminaBarTrackElement.className = 'hud-health-bar-track hud-stamina-bar-track';
+    this.staminaBarTrackElement.appendChild(this.staminaBarFillElement);
+
     this.healthBarFillElement = document.createElement('div');
     this.healthBarFillElement.className = 'hud-health-bar-fill';
 
@@ -86,10 +98,15 @@ export class Hud {
     barTrack.className = 'hud-health-bar-track';
     barTrack.appendChild(this.healthBarFillElement);
 
+    const barColumn = document.createElement('div');
+    barColumn.className = 'hud-health-bars';
+    barColumn.appendChild(this.staminaBarTrackElement);
+    barColumn.appendChild(barTrack);
+
     this.healthNumberElement = document.createElement('div');
     this.healthNumberElement.className = 'hud-health-number';
 
-    section.appendChild(barTrack);
+    section.appendChild(barColumn);
     section.appendChild(this.healthNumberElement);
 
     return section;
@@ -177,7 +194,8 @@ export class Hud {
 
   /**
    * @param {{
-   *   health: number, magazine: number, magazineSize: number,
+   *   health: number, staminaFraction: number,
+   *   magazine: number, magazineSize: number,
    *   weaponLabel: string, reloading: boolean,
    *   secondsRemaining: number, kills: number,
    *   alive: boolean, respawnSecondsRemaining: number
@@ -193,6 +211,16 @@ export class Hud {
       this.healthBarFillElement.classList.toggle('is-low', state.health < FIGHTER.maximumHealth * LOW_HEALTH_FRACTION);
       this.healthNumberElement.textContent = Math.ceil(state.health);
       previous.health = state.health;
+    }
+
+    const staminaPercent = Math.round(state.staminaFraction * 100);
+    if (staminaPercent !== previous.staminaPercent) {
+      this.staminaBarFillElement.style.width = `${staminaPercent}%`;
+      this.staminaBarTrackElement.classList.toggle(
+        'is-exhausted',
+        staminaPercent < STAMINA_READY_PERCENT
+      );
+      previous.staminaPercent = staminaPercent;
     }
 
     if (state.magazine !== previous.magazine || state.magazineSize !== previous.magazineSize) {
