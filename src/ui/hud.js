@@ -27,6 +27,7 @@ export class Hud {
     this.container.className = 'hud';
 
     this.container.appendChild(this.buildCrosshair());
+    this.container.appendChild(this.buildScopeOverlay());
     this.container.appendChild(this.buildHealthSection());
     this.container.appendChild(this.buildAmmunitionSection());
     this.container.appendChild(this.buildTimerSection());
@@ -42,6 +43,7 @@ export class Hud {
 
     this.previousState = {
       aimPercent: null,
+      scopePercent: null,
       crosshairSpreadPixels: null,
       health: null,
       staminaPercent: null,
@@ -83,6 +85,32 @@ export class Hud {
 
     this.crosshairElement = crosshair;
     return crosshair;
+  }
+
+  /** Telescopic sight: black surround, circular lens and reticle. */
+  buildScopeOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'hud-scope';
+
+    const lens = document.createElement('div');
+    lens.className = 'hud-scope-lens';
+
+    const reticle = document.createElement('div');
+    reticle.className = 'hud-scope-reticle';
+
+    const horizontalArm = document.createElement('div');
+    horizontalArm.className = 'hud-scope-reticle-arm hud-scope-reticle-arm--horizontal';
+
+    const verticalArm = document.createElement('div');
+    verticalArm.className = 'hud-scope-reticle-arm hud-scope-reticle-arm--vertical';
+
+    reticle.appendChild(horizontalArm);
+    reticle.appendChild(verticalArm);
+    lens.appendChild(reticle);
+    overlay.appendChild(lens);
+
+    this.scopeOverlayElement = overlay;
+    return overlay;
   }
 
   buildHealthSection() {
@@ -204,7 +232,7 @@ export class Hud {
    *   weaponLabel: string, reloading: boolean,
    *   secondsRemaining: number, kills: number,
    *   alive: boolean, respawnSecondsRemaining: number,
-   *   aimFraction: number, movementSpread: number
+   *   aimFraction: number, scopeFraction: number, movementSpread: number
    * }} state
    */
   update(state) {
@@ -214,6 +242,12 @@ export class Hud {
     if (aimPercent !== previous.aimPercent) {
       this.crosshairElement.style.setProperty('--hud-crosshair-aim', String(aimPercent / 100));
       previous.aimPercent = aimPercent;
+    }
+
+    const scopePercent = Math.round(state.scopeFraction * 100);
+    if (scopePercent !== previous.scopePercent) {
+      this.container.style.setProperty('--hud-scope', String(scopePercent / 100));
+      previous.scopePercent = scopePercent;
     }
 
     const crosshairSpreadPixels = Math.round(

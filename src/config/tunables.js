@@ -58,8 +58,16 @@ export const FEEL_PRESETS = {
     jumpPeakHeight: 1.1,
     gravity: 20,
     headshotMultiplier: 2.5,
-    weaponDamage: { pistol: 18, rifle: 14, shotgun: 11, karambit: 35, pitchfork: 55 },
-    weaponRoundsPerMinute: { pistol: 350, rifle: 700, shotgun: 80 }
+    weaponDamage: {
+      pistol: 18,
+      revolver: 38,
+      rifle: 14,
+      shotgun: 11,
+      sniper: 100,
+      karambit: 35,
+      pitchfork: 55
+    },
+    weaponRoundsPerMinute: { pistol: 350, revolver: 180, rifle: 700, shotgun: 80, sniper: 40 }
   },
   balanced: {
     label: 'Balanced',
@@ -69,8 +77,16 @@ export const FEEL_PRESETS = {
     jumpPeakHeight: 0.9,
     gravity: 18,
     headshotMultiplier: 3.0,
-    weaponDamage: { pistol: 26, rifle: 24, shotgun: 15, karambit: 45, pitchfork: 70 },
-    weaponRoundsPerMinute: { pistol: 350, rifle: 700, shotgun: 80 }
+    weaponDamage: {
+      pistol: 26,
+      revolver: 50,
+      rifle: 24,
+      shotgun: 15,
+      sniper: 100,
+      karambit: 45,
+      pitchfork: 70
+    },
+    weaponRoundsPerMinute: { pistol: 350, revolver: 180, rifle: 700, shotgun: 80, sniper: 40 }
   },
   tactical: {
     label: 'Tactical',
@@ -80,8 +96,16 @@ export const FEEL_PRESETS = {
     jumpPeakHeight: 0.75,
     gravity: 16,
     headshotMultiplier: 4.0,
-    weaponDamage: { pistol: 35, rifle: 36, shotgun: 20, karambit: 55, pitchfork: 90 },
-    weaponRoundsPerMinute: { pistol: 300, rifle: 600, shotgun: 80 }
+    weaponDamage: {
+      pistol: 35,
+      revolver: 60,
+      rifle: 36,
+      shotgun: 20,
+      sniper: 120,
+      karambit: 55,
+      pitchfork: 90
+    },
+    weaponRoundsPerMinute: { pistol: 300, revolver: 180, rifle: 600, shotgun: 80, sniper: 40 }
   }
 };
 
@@ -134,7 +158,15 @@ export const DIFFICULTIES = {
 
 export const DEFAULT_DIFFICULTY = 'medium';
 
-export const WEAPON_ORDER = ['pistol', 'rifle', 'shotgun', 'karambit', 'pitchfork'];
+export const WEAPON_ORDER = [
+  'pistol',
+  'revolver',
+  'rifle',
+  'shotgun',
+  'sniper',
+  'karambit',
+  'pitchfork'
+];
 
 /**
  * Properties that do not change between feel presets. Damage, fire rate and
@@ -159,6 +191,24 @@ const WEAPON_BASE = {
     falloffStart: 25,
     falloffEnd: 60,
     falloffFloor: 0.75
+  },
+  revolver: {
+    label: 'Revolver',
+    kind: 'gun',
+    fireMode: 'semi',
+    magazineSize: 6,
+    reloadSeconds: 2.5,
+    pelletCount: 1,
+    baseSpread: 0.0046,
+    spreadPerShot: 0.009,
+    maximumSpread: 0.055,
+    spreadRecoveryPerSecond: 0.07,
+    recoilVertical: 0.075,
+    recoilHorizontal: 0.014,
+    maximumRange: 90,
+    falloffStart: 45,
+    falloffEnd: 80,
+    falloffFloor: 0.55
   },
   rifle: {
     label: 'Rifle',
@@ -196,6 +246,22 @@ const WEAPON_BASE = {
     falloffStart: 6,
     falloffEnd: 22,
     falloffFloor: 0.25
+  },
+  sniper: {
+    label: 'Sniper',
+    kind: 'gun',
+    fireMode: 'semi',
+    magazineSize: 5,
+    reloadSeconds: 3.5,
+    pelletCount: 1,
+    baseSpread: 0.14,
+    spreadPerShot: 0.02,
+    maximumSpread: 0.2,
+    spreadRecoveryPerSecond: 0.25,
+    recoilVertical: 0.11,
+    recoilHorizontal: 0.01,
+    headshotMultiplier: 1.5,
+    maximumRange: 200
   },
   karambit: {
     label: 'Karambit',
@@ -236,7 +302,7 @@ export function resolveWeapons(feelKey) {
       damage,
       roundsPerMinute,
       cooldownSeconds: 60 / roundsPerMinute,
-      headshotMultiplier: feel.headshotMultiplier
+      headshotMultiplier: base.headshotMultiplier ?? feel.headshotMultiplier
     };
   });
 }
@@ -447,23 +513,82 @@ export const DEFAULT_KEY_BINDINGS = {
   scoreboard: ['Tab']
 };
 
-export const WEAPON_SLOT_KEY_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
+export const WEAPON_SLOT_KEY_CODES = [
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
+  'Digit7'
+];
 
 /**
  * Aiming down the sights. Holding aim trades mobility for a tighter cone and a
  * narrower field of view. Melee weapons cannot aim.
  */
 export const AIM = {
-  spreadMultiplier: 0.3,
   movementSpreadMultiplier: 0.55,
-  fieldOfViewMultiplier: 0.72,
-  sensitivityMultiplier: 0.65,
-  movementSpeedMultiplier: 0.5,
-  transitionSeconds: 0.14,
   sprintCancelsAim: true
 };
 
-/** Per-weapon override of AIM.spreadMultiplier, for weapons that should gain less. */
-export const AIM_SPREAD_OVERRIDES = {
-  shotgun: 0.75
+/**
+ * What each weapon aims through. Magnification, sight type and handling cost
+ * follow the real optic the weapon would carry, so a revolver's pistol scope
+ * behaves nothing like a bolt-action rifle's telescopic sight.
+ *
+ */
+export const OPTICS = {
+  pistol: {
+    sight: 'iron',
+    magnification: 1.15,
+    scopeInSeconds: 0.22,
+    movementSpeedMultiplier: 0.6,
+    spreadMultiplier: 0.3,
+    drawsScopeOverlay: false
+  },
+  revolver: {
+    sight: 'pistolScope',
+    magnification: 2,
+    scopeInSeconds: 0.3,
+    movementSpeedMultiplier: 0.85,
+    spreadMultiplier: 0.3,
+    drawsScopeOverlay: false
+  },
+  rifle: {
+    sight: 'opticalSight',
+    magnification: 1.6,
+    scopeInSeconds: 0.25,
+    movementSpeedMultiplier: 0.55,
+    spreadMultiplier: 0.3,
+    drawsScopeOverlay: false
+  },
+  shotgun: {
+    sight: 'bead',
+    magnification: 1.1,
+    scopeInSeconds: 0.2,
+    movementSpeedMultiplier: 0.7,
+    spreadMultiplier: 0.75,
+    drawsScopeOverlay: false
+  },
+  sniper: {
+    sight: 'telescopic',
+    magnification: 6,
+    scopeInSeconds: 0.7,
+    movementSpeedMultiplier: 0.4,
+    spreadMultiplier: 0.02,
+    drawsScopeOverlay: true
+  }
 };
+
+/**
+ * Field of view through an optic of the given magnification.
+ *
+ * Magnification scales the linear width of the view plane, not the angle, so
+ * the conversion runs through the tangent. Dividing the angle directly is the
+ * common mistake and over-zooms: a 6x scope is 14.6 degrees, not 12.5.
+ */
+export function scopedFieldOfView(magnification) {
+  const halfBase = (CAMERA.fieldOfView * Math.PI) / 360;
+  return (2 * Math.atan(Math.tan(halfBase) / magnification) * 180) / Math.PI;
+}

@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { WORLD, FIGHTER, CONCEALMENT } from '../config/tunables.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createTexturedBox, scaleUvs, mergeByMaterial } from './materials.js';
 
 const scratchMatrix = new THREE.Matrix4();
@@ -33,7 +34,10 @@ const CROP_HEIGHT = 0.45;
 const CROP_ROW_SPACING = 0.8;
 const CROP_PLANT_SPACING = 0.45;
 
-const WHEAT_STALK_RADIUS = 0.055;
+const WHEAT_STEM_RADIUS_BASE = 0.03;
+const WHEAT_STEM_RADIUS_TOP = 0.014;
+const WHEAT_HEAD_HEIGHT_FRACTION = 0.2;
+const WHEAT_HEAD_RADIUS = 0.045;
 const WHEAT_STALK_SPACING = 0.35;
 const WHEAT_STALK_JITTER = 0.1;
 const WHEAT_STALK_LEAN = 0.16;
@@ -41,6 +45,76 @@ const WHEAT_FENCE_MARGIN = 2;
 const WHEAT_CLEARANCE_RADIUS = 1;
 const WHEAT_CLEARANCE_SAMPLE_SPACING = 1.2;
 const WHEAT_PLACEMENT_ATTEMPTS = 400;
+
+/** Idle instances kept in the wheat mesh so patches planted mid-match need no second draw call. */
+const WHEAT_SPARE_PATCH_COUNT = 6;
+
+/**
+ * Wind. The sway is a vertex displacement only; it never reaches collision or
+ * concealment, both of which stay on the static rectangles they always used.
+ */
+const WIND = {
+  directionX: 0.87,
+  directionZ: 0.5,
+  wheatAmplitude: 0.09,
+  cropAmplitude: 0.03
+};
+
+const windUniforms = { windTime: { value: 0 } };
+
+/** Advances the shared wind clock. Call once per frame with the match time. */
+export function updateWind(elapsedSeconds) {
+  windUniforms.windTime.value = elapsedSeconds;
+}
+
+/**
+ * Injects the sway at <project_vertex>, the one point in the standard program
+ * where the instance matrix is already applied: the gust phase can be read off
+ * the world position there, and the offset is added in view space so a stalk
+ * leans downwind no matter how its instance is rotated. The baked-in constants
+ * differ per crop, so customProgramCacheKey has to separate the two programs -
+ * the default key is onBeforeCompile.toString(), identical for both closures.
+ */
+function applyWind(material, stalkHeight, amplitude) {
+  const windChunk = `
+vec4 mvPosition = vec4( transformed, 1.0 );
+
+#ifdef USE_INSTANCING
+  mvPosition = instanceMatrix * mvPosition;
+  vec2 windSeed = instanceMatrix[ 3 ].xz;
+  float windScale = length( instanceMatrix[ 1 ].xyz );
+#else
+  vec2 windSeed = mvPosition.xz;
+  float windScale = 1.0;
+#endif
+
+vec3 windWorldPosition = ( modelMatrix * mvPosition ).xyz;
+float windPhase = fract( sin( dot( windSeed, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+float windHeight = position.y / ${stalkHeight.toFixed(4)};
+windHeight *= windHeight;
+
+float windGust = 0.62 + 0.38 * sin( windTime * 0.21 + dot( windWorldPosition.xz, vec2( 0.035, 0.021 ) ) );
+float windRipple =
+  0.62 * sin( dot( windWorldPosition.xz, vec2( 0.9, 0.35 ) ) - windTime * 2.1 + windPhase * 6.2831 ) +
+  0.38 * sin( dot( windWorldPosition.xz, vec2( -0.3, 1.1 ) ) - windTime * 3.3 + windPhase * 3.1416 );
+float windBend = windRipple * windGust * ( 0.7 + 0.6 * windPhase ) * ${amplitude.toFixed(4)} * windHeight * windScale;
+vec2 windOffset = vec2( ${WIND.directionX.toFixed(4)}, ${WIND.directionZ.toFixed(4)} ) * windBend;
+
+mvPosition = modelViewMatrix * mvPosition;
+mvPosition.xyz += ( viewMatrix * vec4( windOffset.x, 0.0, windOffset.y, 0.0 ) ).xyz;
+
+gl_Position = projectionMatrix * mvPosition;
+`;
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.windTime = windUniforms.windTime;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float windTime;')
+      .replace('#include <project_vertex>', windChunk);
+  };
+
+  material.customProgramCacheKey = () => `wind:${stalkHeight}:${amplitude}`;
+}
 
 export function createFence(materials, collisionWorld) {
   const extent = WORLD.playHalfExtent;
@@ -277,6 +351,8 @@ export function createCropRows(materials, random) {
   const geometry = new THREE.ConeGeometry(0.1, CROP_HEIGHT, 4, 1);
   geometry.translate(0, CROP_HEIGHT / 2, 0);
 
+  applyWind(materials.crop, CROP_HEIGHT, WIND.cropAmplitude);
+
   return buildInstancedMesh(geometry, materials.crop, plants, false, false);
 }
 
@@ -285,7 +361,15 @@ export function createCropRows(materials, random) {
  *
  * Registers concealment but no collision, so movement and bullets pass
  * straight through. The whole set is one InstancedMesh regardless of patch
- * count, which keeps the draw-call cost at one.
+ * count, which keeps the draw-call cost at one. The mesh carries spare parked
+ * instances beyond the static stalks, so patches planted during the match fill
+ * the same mesh instead of adding a draw call.
+ *
+ * @returns {{
+ *   mesh: import('three').InstancedMesh,
+ *   allocateStalks: (stalkCount: number) => { firstIndex: number, count: number },
+ *   commitStalks: () => void
+ * }}
  */
 export function createWheatPatches(materials, collisionWorld, concealmentField, random) {
   const patches = [];
@@ -338,10 +422,83 @@ export function createWheatPatches(materials, collisionWorld, concealmentField, 
     }
   }
 
-  const geometry = new THREE.ConeGeometry(WHEAT_STALK_RADIUS, CONCEALMENT.cropHeight, 4, 1);
-  geometry.translate(0, CONCEALMENT.cropHeight / 2, 0);
+  applyWind(materials.wheat, CONCEALMENT.cropHeight, WIND.wheatAmplitude);
 
-  return buildInstancedMesh(geometry, materials.hay, stalks, false, false);
+  const stalksPerMaximumPatch =
+    Math.floor(CONCEALMENT.maximumPatchExtent / WHEAT_STALK_SPACING) ** 2;
+  const capacity = stalks.length + WHEAT_SPARE_PATCH_COUNT * stalksPerMaximumPatch;
+
+  const mesh = new THREE.InstancedMesh(createWheatStalkGeometry(), materials.wheat, capacity);
+  writePlacements(mesh, stalks);
+  parkSpareInstances(mesh, stalks.length);
+  mesh.count = stalks.length;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.computeBoundingSphere();
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+
+  /**
+   * Hands out a block of the spare instances for stalks planted during the
+   * match. Write the block with mesh.setMatrixAt, then call commitStalks.
+   */
+  function allocateStalks(stalkCount) {
+    const firstIndex = mesh.count;
+    if (firstIndex + stalkCount > capacity) throw new Error('wheat instance capacity exhausted');
+    mesh.count = firstIndex + stalkCount;
+    return { firstIndex, count: stalkCount };
+  }
+
+  function commitStalks() {
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }
+
+  return { mesh, allocateStalks, commitStalks };
+}
+
+/**
+ * Spare instances get a composed zero-scale matrix rather than the buffer's
+ * zeroes, whose w of 0 would make the degenerate vertices undefined rather
+ * than collapsed.
+ */
+function parkSpareInstances(mesh, firstIndex) {
+  scratchPosition.set(0, 0, 0);
+  scratchQuaternion.identity();
+  scratchScale.set(0, 0, 0);
+  scratchMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
+
+  for (let index = firstIndex; index < mesh.instanceMatrix.count; index += 1) {
+    mesh.setMatrixAt(index, scratchMatrix);
+  }
+}
+
+/** Tapered stem carrying a spindle-shaped seed head, base sitting at y = 0. */
+function createWheatStalkGeometry() {
+  const headHeight = CONCEALMENT.cropHeight * WHEAT_HEAD_HEIGHT_FRACTION;
+  const stemHeight = CONCEALMENT.cropHeight - headHeight;
+
+  const stem = new THREE.CylinderGeometry(
+    WHEAT_STEM_RADIUS_TOP,
+    WHEAT_STEM_RADIUS_BASE,
+    stemHeight,
+    3,
+    3,
+    true
+  );
+  stem.translate(0, stemHeight / 2, 0);
+  scaleUvs(stem, 1, 4);
+
+  const head = new THREE.LatheGeometry(
+    [
+      new THREE.Vector2(WHEAT_STEM_RADIUS_TOP, 0),
+      new THREE.Vector2(WHEAT_HEAD_RADIUS, headHeight * 0.45),
+      new THREE.Vector2(0, headHeight)
+    ],
+    4
+  );
+  head.translate(0, stemHeight, 0);
+
+  return mergeGeometries([stem, head]);
 }
 
 function overlapsAnyPatch(patches, candidate) {
@@ -618,6 +775,16 @@ function addRotatedCollisionBox(collisionWorld, centerX, baseY, centerZ, sizeX, 
 function buildInstancedMesh(geometry, material, placements, castShadow, receiveShadow) {
   const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
 
+  writePlacements(mesh, placements);
+
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.computeBoundingSphere();
+  mesh.castShadow = castShadow;
+  mesh.receiveShadow = receiveShadow;
+  return mesh;
+}
+
+function writePlacements(mesh, placements) {
   for (const [index, placement] of placements.entries()) {
     scratchPosition.set(placement.x, placement.y, placement.z);
     scratchEuler.set(0, placement.rotationY, placement.rotationZ);
@@ -626,10 +793,4 @@ function buildInstancedMesh(geometry, material, placements, castShadow, receiveS
     scratchMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
     mesh.setMatrixAt(index, scratchMatrix);
   }
-
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.computeBoundingSphere();
-  mesh.castShadow = castShadow;
-  mesh.receiveShadow = receiveShadow;
-  return mesh;
 }

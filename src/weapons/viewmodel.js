@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three';
+import { OPTICS } from '../config/tunables.js';
 import { mergeByMaterial } from '../world/materials.js';
 
 const TWO_PI = Math.PI * 2;
@@ -55,12 +56,54 @@ const MELEE_SWING_FORWARD_METRES = 0.2;
 const MELEE_SWING_ROLL_RADIANS = 1.1;
 const MELEE_SWING_YAW_RADIANS = 0.55;
 
-const REST_TRANSFORMS = {
-  pistol: { position: [0.17, -0.17, -0.38], rotation: [0.02, -0.18, 0], scale: 1.5 },
-  rifle: { position: [0.19, -0.2, -0.42], rotation: [0.02, -0.15, 0], scale: 1.15 },
-  shotgun: { position: [0.19, -0.2, -0.42], rotation: [0.02, -0.15, 0], scale: 1.1 },
-  karambit: { position: [0.21, -0.19, -0.34], rotation: [-0.15, -0.45, 0.35], scale: 1.7 },
-  pitchfork: { position: [0.22, -0.26, -0.4], rotation: [-0.04, -0.1, 0.1], scale: 0.8 }
+const SCOPE_HIDE_FRACTION = 0.9;
+const SCOPE_STEADY_FACTOR = 0.85;
+
+/**
+ * Hip pose and aim pose per weapon, in camera space. The aim entry is where the
+ * group sits once the weapon is fully raised, and it is derived from the sight
+ * the weapon actually carries (OPTICS in tunables), not from a shared offset:
+ *
+ * - iron sights and the shotgun's bead land their sight line a few millimetres
+ *   below the crosshair, which is how a shooter sees a post inside a notch;
+ * - the revolver's pistol scope and the rifle's optical sight put their optical
+ *   axis on the crosshair, so they ride higher than irons;
+ * - the sniper's telescopic sight puts the SCOPE tube's axis on the crosshair,
+ *   which is far higher again because the tube sits on rings above the receiver.
+ *
+ * Every aim Y is the negated sight height of that model's own geometry times
+ * its scale, so moving a sight in a builder means moving the number here too.
+ * Melee weapons cannot aim, so their aim entry is null.
+ */
+const WEAPON_POSES = {
+  pistol: {
+    rest: { position: [0.17, -0.17, -0.38], rotation: [0.02, -0.18, 0], scale: 1.5 },
+    aim: { position: [0, -0.09, -0.33], rotation: [0, 0, 0] }
+  },
+  revolver: {
+    rest: { position: [0.18, -0.18, -0.4], rotation: [0.02, -0.17, 0], scale: 1.25 },
+    aim: { position: [0, -0.06, -0.32], rotation: [0, 0, 0] }
+  },
+  rifle: {
+    rest: { position: [0.19, -0.2, -0.42], rotation: [0.02, -0.15, 0], scale: 1.15 },
+    aim: { position: [0, -0.083, -0.36], rotation: [0, 0, 0] }
+  },
+  shotgun: {
+    rest: { position: [0.19, -0.2, -0.42], rotation: [0.02, -0.15, 0], scale: 1.1 },
+    aim: { position: [0, -0.06, -0.4], rotation: [0, 0, 0] }
+  },
+  sniper: {
+    rest: { position: [0.2, -0.22, -0.44], rotation: [0.02, -0.14, 0], scale: 1.0 },
+    aim: { position: [0, -0.105, -0.3], rotation: [0, 0, 0] }
+  },
+  karambit: {
+    rest: { position: [0.21, -0.19, -0.34], rotation: [-0.15, -0.45, 0.35], scale: 1.7 },
+    aim: null
+  },
+  pitchfork: {
+    rest: { position: [0.22, -0.26, -0.4], rotation: [-0.04, -0.1, 0.1], scale: 0.8 },
+    aim: null
+  }
 };
 
 /**
@@ -75,8 +118,10 @@ const REST_TRANSFORMS = {
  */
 const MUZZLE_ANCHORS = {
   pistol: { position: [0, 0.005, -0.18], pitchX: 0 },
+  revolver: { position: [0, 0.016, -0.295], pitchX: 0 },
   rifle: { position: [0, 0.012, -0.685], pitchX: 0 },
   shotgun: { position: [0, 0.024, -0.7], pitchX: 0 },
+  sniper: { position: [0, 0.01, -1.0], pitchX: 0 },
   karambit: { position: [0, 0.0779, -0.1416], pitchX: 1.25 },
   pitchfork: { position: [0, 0, -1.12], pitchX: 0 }
 };
@@ -97,8 +142,10 @@ export class ViewModel {
     const viewMaterials = createViewMaterials(materials);
     const builders = {
       pistol: buildPistol,
+      revolver: buildRevolver,
       rifle: buildRifle,
       shotgun: buildShotgun,
+      sniper: buildSniper,
       karambit: buildKarambit,
       pitchfork: buildPitchfork
     };
@@ -107,7 +154,7 @@ export class ViewModel {
     this.muzzleAnchors = new Map();
     for (const weaponId of Object.keys(builders)) {
       const model = mergeByMaterial(builders[weaponId](viewMaterials), false, true);
-      model.scale.setScalar(REST_TRANSFORMS[weaponId].scale);
+      model.scale.setScalar(WEAPON_POSES[weaponId].rest.scale);
       model.visible = false;
       for (const mesh of model.children) {
         mesh.renderOrder = RENDER_ORDER;
@@ -127,7 +174,14 @@ export class ViewModel {
 
     this.activeModel = null;
     this.activeMuzzleAnchor = null;
-    this.restTransform = REST_TRANSFORMS.pistol;
+    this.restPosition = WEAPON_POSES.pistol.rest.position;
+    this.restRotation = WEAPON_POSES.pistol.rest.rotation;
+    this.aimPosition = WEAPON_POSES.pistol.aim.position;
+    this.aimRotation = WEAPON_POSES.pistol.aim.rotation;
+    this.activeOptic = null;
+    this.scopeRatePerSecond = 0;
+    this.hidesModelAtFullScope = false;
+    this.scopeFraction = 0;
 
     this.bobAmplitude = 0;
     this.swayLateral = 0;
@@ -149,11 +203,39 @@ export class ViewModel {
     this.activeModel = this.models.get(weaponId);
     this.activeModel.visible = true;
     this.activeMuzzleAnchor = this.muzzleAnchors.get(weaponId);
-    this.restTransform = REST_TRANSFORMS[weaponId];
+
+    const pose = WEAPON_POSES[weaponId];
+    this.restPosition = pose.rest.position;
+    this.restRotation = pose.rest.rotation;
+    this.aimPosition = pose.aim === null ? pose.rest.position : pose.aim.position;
+    this.aimRotation = pose.aim === null ? pose.rest.rotation : pose.aim.rotation;
+
+    this.activeOptic = pose.aim === null ? null : OPTICS[weaponId];
+    this.scopeRatePerSecond = pose.aim === null ? 0 : 1 / OPTICS[weaponId].scopeInSeconds;
+    this.hidesModelAtFullScope = pose.aim !== null && OPTICS[weaponId].drawsScopeOverlay;
+    this.scopeFraction = 0;
   }
 
   hasMuzzleAnchor() {
     return this.activeMuzzleAnchor !== null;
+  }
+
+  /**
+   * The optic the active weapon aims through, as the shared OPTICS entry, or
+   * null for a melee weapon. The interface layer reads `sight`, `magnification`
+   * and `drawsScopeOverlay` off it to decide which reticle or overlay to draw.
+   */
+  getActiveOptic() {
+    return this.activeOptic;
+  }
+
+  /**
+   * How far the weapon has come up, 0 at the hip and 1 fully sighted. Travel
+   * takes the active weapon's own OPTICS.scopeInSeconds, so the interface layer
+   * can fade a scope overlay in on the same curve the model moves on.
+   */
+  getScopeFraction() {
+    return this.scopeFraction;
   }
 
   /**
@@ -192,6 +274,8 @@ export class ViewModel {
   }
 
   update(deltaSeconds, fighter) {
+    this.updateScopeFraction(deltaSeconds, fighter);
+
     const walkSpeed = fighter.feel.walkSpeed;
     const sprintSpeed = fighter.feel.sprintSpeed;
     const speed = fighter.horizontalSpeed;
@@ -201,12 +285,19 @@ export class ViewModel {
     const bobBlend = Math.min(1, deltaSeconds * BOB_SMOOTHING_PER_SECOND);
     this.bobAmplitude += (target - this.bobAmplitude) * bobBlend;
 
+    // Bob and sway are damped as the weapon comes up, or the sight would wander
+    // off the crosshair the aim pose just put it on.
+    const steadiness = 1 - this.scopeFraction * SCOPE_STEADY_FACTOR;
+    const bobWeight = this.bobAmplitude * steadiness;
+
     const phase = fighter.distanceTravelled * BOB_CYCLES_PER_METRE * TWO_PI;
-    const bobLateral = Math.sin(phase) * BOB_LATERAL_METRES * this.bobAmplitude;
-    const bobVertical = -Math.abs(Math.cos(phase)) * BOB_VERTICAL_METRES * this.bobAmplitude;
-    const bobRoll = Math.sin(phase) * BOB_ROLL_RADIANS * this.bobAmplitude;
+    const bobLateral = Math.sin(phase) * BOB_LATERAL_METRES * bobWeight;
+    const bobVertical = -Math.abs(Math.cos(phase)) * BOB_VERTICAL_METRES * bobWeight;
+    const bobRoll = Math.sin(phase) * BOB_ROLL_RADIANS * bobWeight;
 
     this.updateSway(deltaSeconds, fighter);
+    const swayLateral = this.swayLateral * steadiness;
+    const swayVertical = this.swayVertical * steadiness;
 
     const sprintAmount = THREE.MathUtils.clamp(
       (speed - walkSpeed) / (sprintSpeed - walkSpeed),
@@ -214,24 +305,33 @@ export class ViewModel {
       1
     );
 
-    const rest = this.restTransform;
-    let positionX = rest.position[0] + bobLateral + this.swayLateral;
+    const scope = this.scopeFraction;
+    const restPosition = this.restPosition;
+    const restRotation = this.restRotation;
+    const poseX = restPosition[0] + (this.aimPosition[0] - restPosition[0]) * scope;
+    const poseY = restPosition[1] + (this.aimPosition[1] - restPosition[1]) * scope;
+    const poseZ = restPosition[2] + (this.aimPosition[2] - restPosition[2]) * scope;
+    const poseRotationX = restRotation[0] + (this.aimRotation[0] - restRotation[0]) * scope;
+    const poseRotationY = restRotation[1] + (this.aimRotation[1] - restRotation[1]) * scope;
+    const poseRotationZ = restRotation[2] + (this.aimRotation[2] - restRotation[2]) * scope;
+
+    let positionX = poseX + bobLateral + swayLateral;
     let positionY =
-      rest.position[1] +
+      poseY +
       bobVertical +
-      this.swayVertical +
+      swayVertical +
       fighter.crouchAmount * CROUCH_RAISE_METRES -
       sprintAmount * SPRINT_DROP_METRES;
-    let positionZ = rest.position[2];
+    let positionZ = poseZ;
 
     let rotationX =
-      rest.rotation[0] +
-      this.swayVertical * SWAY_ROTATION_GAIN +
+      poseRotationX +
+      swayVertical * SWAY_ROTATION_GAIN +
       fighter.crouchAmount * CROUCH_PITCH_RADIANS +
       sprintAmount * SPRINT_PITCH_RADIANS;
     let rotationY =
-      rest.rotation[1] - this.swayLateral * SWAY_ROTATION_GAIN + sprintAmount * SPRINT_YAW_RADIANS;
-    let rotationZ = rest.rotation[2] + bobRoll;
+      poseRotationY - swayLateral * SWAY_ROTATION_GAIN + sprintAmount * SPRINT_YAW_RADIANS;
+    let rotationZ = poseRotationZ + bobRoll;
 
     if (this.firingTimer > 0) {
       this.firingTimer -= deltaSeconds;
@@ -263,6 +363,30 @@ export class ViewModel {
 
     this.group.position.set(positionX, positionY, positionZ);
     this.group.rotation.set(rotationX, rotationY, rotationZ);
+
+    if (this.hidesModelAtFullScope) {
+      this.activeModel.visible = scope < SCOPE_HIDE_FRACTION;
+    }
+  }
+
+  /**
+   * Raises and lowers the weapon at the rate its own optic allows: a bolt gun
+   * with a telescopic sight takes OPTICS.sniper.scopeInSeconds to come up, a
+   * pistol a third of that. `fighter.aimFraction` is the wish, this is the
+   * weapon obeying it.
+   */
+  updateScopeFraction(deltaSeconds, fighter) {
+    if (this.activeOptic === null) {
+      this.scopeFraction = 0;
+      return;
+    }
+
+    const step = deltaSeconds * this.scopeRatePerSecond;
+    this.scopeFraction += THREE.MathUtils.clamp(
+      fighter.aimFraction - this.scopeFraction,
+      -step,
+      step
+    );
   }
 
   /** The weapon trails the view: a fast turn throws it opposite and it settles back. */
@@ -294,6 +418,8 @@ export class ViewModel {
   reset() {
     this.reloadTimer = 0;
     this.meleeTimer = 0;
+    this.scopeFraction = 0;
+    this.activeModel.visible = true;
   }
 
   playFire() {
@@ -394,6 +520,88 @@ function buildPistol(materials) {
   ];
 }
 
+/**
+ * The silhouette has to say revolver before any detail does, so the cylinder is
+ * a twelve-sided drum wider than the frame it sits in, fluted with six sunken
+ * ribs for the six chambers, and the barrel carries a Python-style vented rib.
+ */
+function buildRevolver(materials) {
+  const parts = [
+    part(new THREE.BoxGeometry(0.04, 0.072, 0.17), materials.darkMetal, 0, 0.012, -0.03, 0, 0, 0),
+    part(
+      new THREE.CylinderGeometry(0.038, 0.038, 0.095, 12),
+      materials.gunMetal,
+      0,
+      0.008,
+      -0.055,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.014, 0.014, 0.2, 8),
+      materials.gunMetal,
+      0,
+      0.016,
+      -0.195,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(new THREE.BoxGeometry(0.022, 0.01, 0.2), materials.gunMetal, 0, 0.034, -0.195, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.02, 0.018, 0.18), materials.gunMetal, 0, -0.002, -0.19, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.012, 0.04, 0.016), materials.darkMetal, 0, 0.058, 0.045, -0.45, 0, 0),
+    part(new THREE.BoxGeometry(0.01, 0.03, 0.01), materials.gunMetal, 0, -0.035, 0.01, 0, 0, 0),
+    part(
+      new THREE.TorusGeometry(0.026, 0.004, 4, 10),
+      materials.darkMetal,
+      0,
+      -0.048,
+      0.012,
+      0,
+      QUARTER_TURN,
+      0
+    ),
+    part(new THREE.BoxGeometry(0.056, 0.145, 0.082), materials.wood, 0, -0.095, 0.055, 0.42, 0, 0),
+    part(new THREE.BoxGeometry(0.034, 0.09, 0.03), materials.darkMetal, 0, -0.04, 0.04, 0.42, 0, 0),
+    part(new THREE.BoxGeometry(0.01, 0.016, 0.014), materials.darkMetal, 0, 0.048, -0.285, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.022, 0.01, 0.012), materials.darkMetal, 0, 0.05, 0.03, 0, 0, 0)
+  ];
+
+  for (let index = 0; index < 6; index += 1) {
+    const angle = (index / 6) * TWO_PI;
+    parts.push(
+      part(
+        new THREE.BoxGeometry(0.012, 0.006, 0.072),
+        materials.darkMetal,
+        Math.cos(angle) * 0.035,
+        0.008 + Math.sin(angle) * 0.035,
+        -0.055,
+        0,
+        0,
+        angle
+      )
+    );
+  }
+
+  for (let index = 0; index < 4; index += 1) {
+    parts.push(
+      part(
+        new THREE.BoxGeometry(0.024, 0.006, 0.009),
+        materials.darkMetal,
+        0,
+        0.036,
+        -0.13 - index * 0.04,
+        0,
+        0,
+        0
+      )
+    );
+  }
+
+  return parts;
+}
+
 function buildRifle(materials) {
   return [
     part(new THREE.BoxGeometry(0.058, 0.082, 0.34), materials.darkMetal, 0, 0, -0.08, 0, 0, 0),
@@ -463,6 +671,161 @@ function buildShotgun(materials) {
     part(new THREE.BoxGeometry(0.05, 0.07, 0.1), materials.wood, 0, -0.025, 0.08, 0, 0, 0),
     part(new THREE.BoxGeometry(0.052, 0.1, 0.26), materials.wood, 0, -0.05, 0.19, -0.14, 0, 0),
     part(new THREE.BoxGeometry(0.012, 0.012, 0.012), materials.gunMetal, 0, 0.05, -0.69, 0, 0, 0)
+  ];
+}
+
+/**
+ * A bolt gun in the Accuracy International family. rotateX(QUARTER_TURN) maps
+ * the cylinder's top cap onto +Z, so the forward radius of every barrel and
+ * scope section is the one passed as radiusBottom.
+ */
+function buildSniper(materials) {
+  return [
+    part(new THREE.BoxGeometry(0.054, 0.082, 0.3), materials.darkMetal, 0, 0, -0.06, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.06, 0.07, 0.36), materials.darkMetal, 0, -0.012, -0.4, 0, 0, 0),
+    part(
+      new THREE.CylinderGeometry(0.019, 0.016, 0.44, 8),
+      materials.gunMetal,
+      0,
+      0.01,
+      -0.72,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.024, 0.024, 0.06, 8),
+      materials.gunMetal,
+      0,
+      0.01,
+      -0.97,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(new THREE.BoxGeometry(0.052, 0.008, 0.008), materials.darkMetal, 0, 0.01, -0.96, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.052, 0.008, 0.008), materials.darkMetal, 0, 0.01, -0.982, 0, 0, 0),
+    part(
+      new THREE.CylinderGeometry(0.019, 0.019, 0.3, 10),
+      materials.gunMetal,
+      0,
+      0.105,
+      -0.07,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.026, 0.03, 0.07, 10),
+      materials.gunMetal,
+      0,
+      0.105,
+      -0.255,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.027, 0.027, 0.004, 10),
+      materials.darkMetal,
+      0,
+      0.105,
+      -0.291,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.027, 0.024, 0.055, 10),
+      materials.gunMetal,
+      0,
+      0.105,
+      0.1075,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.027, 0.027, 0.018, 8),
+      materials.darkMetal,
+      0,
+      0.105,
+      -0.16,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.027, 0.027, 0.018, 8),
+      materials.darkMetal,
+      0,
+      0.105,
+      0.03,
+      QUARTER_TURN,
+      0,
+      0
+    ),
+    part(new THREE.BoxGeometry(0.016, 0.05, 0.018), materials.darkMetal, 0, 0.062, -0.16, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.016, 0.05, 0.018), materials.darkMetal, 0, 0.062, 0.03, 0, 0, 0),
+    part(
+      new THREE.CylinderGeometry(0.013, 0.013, 0.022, 8),
+      materials.gunMetal,
+      0,
+      0.127,
+      -0.07,
+      0,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.013, 0.013, 0.022, 8),
+      materials.gunMetal,
+      0.028,
+      0.105,
+      -0.07,
+      0,
+      0,
+      QUARTER_TURN
+    ),
+    part(new THREE.BoxGeometry(0.056, 0.014, 0.014), materials.darkMetal, 0.046, 0.016, 0.055, 0, 0, -0.3),
+    part(
+      new THREE.CylinderGeometry(0.014, 0.014, 0.016, 8),
+      materials.gunMetal,
+      0.072,
+      0.006,
+      0.055,
+      0,
+      0,
+      QUARTER_TURN
+    ),
+    part(new THREE.BoxGeometry(0.034, 0.075, 0.07), materials.darkMetal, 0, -0.078, -0.06, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.012, 0.028, 0.012), materials.gunMetal, 0, -0.054, 0.005, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.016, 0.009, 0.06), materials.darkMetal, 0, -0.07, 0.005, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.04, 0.115, 0.055), materials.darkMetal, 0, -0.082, 0.085, 0.3, 0, 0),
+    part(new THREE.BoxGeometry(0.046, 0.09, 0.22), materials.darkMetal, 0, -0.01, 0.195, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.044, 0.03, 0.16), materials.darkMetal, 0, 0.05, 0.185, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.048, 0.105, 0.02), materials.darkMetal, 0, -0.01, 0.315, 0, 0, 0),
+    part(new THREE.BoxGeometry(0.03, 0.018, 0.03), materials.darkMetal, 0, -0.055, -0.5, 0, 0, 0),
+    part(
+      new THREE.BoxGeometry(0.009, 0.13, 0.009),
+      materials.gunMetal,
+      -0.042,
+      -0.108,
+      -0.515,
+      0.25,
+      0,
+      -0.35
+    ),
+    part(
+      new THREE.BoxGeometry(0.009, 0.13, 0.009),
+      materials.gunMetal,
+      0.042,
+      -0.108,
+      -0.515,
+      0.25,
+      0,
+      0.35
+    )
   ];
 }
 

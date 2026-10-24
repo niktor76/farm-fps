@@ -43,6 +43,26 @@ const SWING_SMOOTHING_PER_SECOND = 10;
 
 const CROUCH_SCALE = FIGHTER.crouchingHeight / FIGHTER.standingHeight;
 
+// Death animation. Collapse plus settle plus fade is 1.65 s, which stays inside
+// MATCH.respawnDelaySeconds (2 s) so a body is gone before its own respawn.
+const DEATH = {
+  collapseSeconds: 0.9,
+  settleSeconds: 0.25,
+  fadeSeconds: 0.5,
+  toppleRadians: Math.PI / 2,
+  impactFraction: 0.82,
+  bounceFraction: 0.06,
+  fallSpreadRadians: 0.9,
+  groundClearanceMetres: HEIGHT * 0.07,
+  legSlackRadians: 0.18,
+  armSlackRadians: 0.22,
+  armSplayRadians: 0.3
+};
+
+const UP = new THREE.Vector3(0, 1, 0);
+const scratchToppleQuaternion = new THREE.Quaternion();
+const scratchYawQuaternion = new THREE.Quaternion();
+
 const NAMETAG_CANVAS_WIDTH = 256;
 const NAMETAG_CANVAS_HEIGHT = 64;
 const NAMETAG_HEIGHT_PER_METRE = 0.028;
@@ -114,13 +134,101 @@ export function createFighterModel(color) {
 
   let swingAmplitude = 0;
 
+  // The corpse detaches from the fighter the moment it dies: the fighter keeps
+  // its own position and then jumps to a spawn point, which the body must not
+  // follow. deathSeconds below zero means the model is attached again.
+  let deathSeconds = -1;
+  let deathYaw = 0;
+  let deathScaleY = 1;
+  let deathLeftLegRotation = 0;
+  let deathRightLegRotation = 0;
+  let deathLeftArmRotation = 0;
+  let deathRightArmRotation = 0;
+  const deathPosition = new THREE.Vector3();
+  const fallAxis = new THREE.Vector3();
+
+  function beginDeath(fighter) {
+    deathSeconds = 0;
+    deathPosition.copy(fighter.position);
+    deathYaw = fighter.yaw;
+    deathScaleY = group.scale.y;
+
+    const spread =
+      (hashUnitInterval(fighter.id + fighter.deaths * 7.31) * 2 - 1) * DEATH.fallSpreadRadians;
+    fallAxis.set(Math.cos(spread), 0, Math.sin(spread)).applyAxisAngle(UP, deathYaw);
+
+    deathLeftLegRotation = leftLeg.rotation.x;
+    deathRightLegRotation = rightLeg.rotation.x;
+    deathLeftArmRotation = leftArm.rotation.x;
+    deathRightArmRotation = rightArm.rotation.x;
+
+    material.transparent = true;
+    material.needsUpdate = true;
+  }
+
+  function advanceDeath(deltaSeconds) {
+    deathSeconds += deltaSeconds;
+
+    const collapse = Math.min(1, deathSeconds / DEATH.collapseSeconds);
+    const topple = collapseEase(collapse);
+
+    scratchToppleQuaternion.setFromAxisAngle(fallAxis, topple * DEATH.toppleRadians);
+    scratchYawQuaternion.setFromAxisAngle(UP, deathYaw);
+    group.quaternion.multiplyQuaternions(scratchToppleQuaternion, scratchYawQuaternion);
+
+    group.position.set(
+      deathPosition.x,
+      deathPosition.y + DEATH.groundClearanceMetres * Math.min(1, topple),
+      deathPosition.z
+    );
+    group.scale.y = deathScaleY;
+
+    leftLeg.rotation.x = THREE.MathUtils.lerp(deathLeftLegRotation, -DEATH.legSlackRadians, collapse);
+    rightLeg.rotation.x = THREE.MathUtils.lerp(
+      deathRightLegRotation,
+      DEATH.legSlackRadians * 0.6,
+      collapse
+    );
+    leftArm.rotation.x = THREE.MathUtils.lerp(deathLeftArmRotation, DEATH.armSlackRadians, collapse);
+    rightArm.rotation.x = THREE.MathUtils.lerp(
+      deathRightArmRotation,
+      DEATH.armSlackRadians * 0.7,
+      collapse
+    );
+    leftArm.rotation.z = -DEATH.armSplayRadians * collapse;
+    rightArm.rotation.z = DEATH.armSplayRadians * collapse;
+
+    const fadeSeconds = deathSeconds - DEATH.collapseSeconds - DEATH.settleSeconds;
+    const opacity = 1 - THREE.MathUtils.clamp(fadeSeconds / DEATH.fadeSeconds, 0, 1);
+    material.opacity = opacity;
+    group.visible = opacity > 0;
+  }
+
+  function endDeath() {
+    deathSeconds = -1;
+    group.rotation.set(0, 0, 0);
+    group.scale.y = 1;
+    leftArm.rotation.z = 0;
+    rightArm.rotation.z = 0;
+    material.opacity = 1;
+    material.transparent = false;
+    material.needsUpdate = true;
+    swingAmplitude = 0;
+  }
+
   return {
     group,
 
     update(fighter, deltaSeconds) {
-      group.visible = fighter.alive;
-      if (!fighter.alive) return;
+      if (!fighter.alive) {
+        if (deathSeconds < 0) beginDeath(fighter);
+        advanceDeath(deltaSeconds);
+        return;
+      }
 
+      if (deathSeconds >= 0) endDeath();
+
+      group.visible = true;
       group.position.copy(fighter.position);
       group.rotation.y = fighter.yaw;
       group.scale.y = THREE.MathUtils.lerp(1, CROUCH_SCALE, fighter.crouchAmount);
@@ -145,6 +253,22 @@ export function createFighterModel(color) {
       material.dispose();
     }
   };
+}
+
+/** Gravity-like acceleration into the ground, then a damped settle on impact. */
+function collapseEase(progress) {
+  if (progress < DEATH.impactFraction) {
+    const fall = progress / DEATH.impactFraction;
+    return fall * fall;
+  }
+
+  const settle = (progress - DEATH.impactFraction) / (1 - DEATH.impactFraction);
+  return 1 + Math.sin(settle * Math.PI * 2) * DEATH.bounceFraction * (1 - settle);
+}
+
+function hashUnitInterval(value) {
+  const scaled = Math.sin(value * 12.9898) * 43758.5453;
+  return scaled - Math.floor(scaled);
 }
 
 function buildBodyGeometry(color) {

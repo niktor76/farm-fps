@@ -13,6 +13,7 @@
  *   wood: import('three').Material, paintedWood: import('three').Material,
  *   roof: import('three').Material, metal: import('three').Material,
  *   rustedMetal: import('three').Material, hay: import('three').Material,
+ *   wheat: import('three').Material,
  *   stone: import('three').Material, foliage: import('three').Material,
  *   bark: import('three').Material, crop: import('three').Material,
  *   glass: import('three').Material
@@ -112,6 +113,10 @@ export function createMaterialLibrary() {
     metalness: 0
   });
 
+  // Own material so the wind shader reaches the standing wheat without dragging
+  // the hay bales, which share the straw texture, into the same program.
+  const wheat = hay.clone();
+
   const stone = new THREE.MeshStandardMaterial({
     map: createColorTexture((context, size) => {
       paintBlocks(context, size, random, [156, 152, 144]);
@@ -165,6 +170,7 @@ export function createMaterialLibrary() {
     metal,
     rustedMetal,
     hay,
+    wheat,
     stone,
     foliage,
     bark,

@@ -3,7 +3,7 @@ import { GameLoop } from './core/loop.js';
 import { DebugStats } from './core/debugStats.js';
 import { Random } from './core/rng.js';
 import { CollisionWorld } from './world/collision.js';
-import { buildFarm } from './world/map.js';
+import { buildFarm, updateWind } from './world/map.js';
 import { generateSpawnPoints, chooseSpawnPoint } from './world/spawns.js';
 import { Player } from './entities/player.js';
 import { Bot } from './entities/bot.js';
@@ -110,6 +110,7 @@ export class Game {
       elapsed: 0
     };
 
+    this.elapsedRenderSeconds = 0;
     this.hudState = {
       health: 0,
       magazine: 0,
@@ -122,7 +123,8 @@ export class Game {
       respawnSecondsRemaining: 0,
       staminaFraction: 1,
       aimFraction: 0,
-      movementSpread: 0
+      movementSpread: 0,
+      scopeFraction: 0
     };
 
     this.stats = new DebugStats();
@@ -311,6 +313,8 @@ export class Game {
   }
 
   render(frameSeconds) {
+    this.elapsedRenderSeconds += frameSeconds;
+    updateWind(this.elapsedRenderSeconds);
     this.player.syncCamera();
     this.viewModel.update(frameSeconds, this.player);
     this.audio.setListener(this.player.position, this.player.yaw);
@@ -328,6 +332,7 @@ export class Game {
     hudState.staminaFraction = this.player.staminaFraction;
     hudState.aimFraction = this.player.aimFraction;
     hudState.movementSpread = this.player.movementSpread;
+    hudState.scopeFraction = this.player.scopeFraction;
     hudState.respawnSecondsRemaining = Math.max(
       0,
       MATCH.respawnDelaySeconds - this.player.respawnTimer

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Fighter, createIntent } from './fighter.js';
-import { CAMERA, INPUT, AIM } from '../config/tunables.js';
+import { CAMERA, INPUT, scopedFieldOfView } from '../config/tunables.js';
 
 const scratchLookDelta = new THREE.Vector2();
 const scratchEyePosition = new THREE.Vector3();
@@ -13,6 +13,16 @@ const VIEW_BOB_LATERAL_METRES = 0.018;
 const VIEW_BOB_CROUCH_DAMPING = 0.6;
 const VIEW_BOB_AIM_DAMPING = 0.7;
 const VIEW_BOB_SMOOTHING_PER_SECOND = 9;
+
+// The player has no third-person body, so death is sold entirely by the camera:
+// it sinks toward the ground and rolls, then rights itself on respawn.
+const DEATH_VIEW = {
+  dropSeconds: 0.85,
+  recoverSeconds: 0.4,
+  heightMetres: 0.35,
+  rollRadians: 0.45,
+  pitchRadians: 0.2
+};
 
 /**
  * Human controlled fighter: turns input into movement intent and drives the
@@ -45,6 +55,7 @@ export class Player extends Fighter {
     this.viewBobAmplitude = 0;
     this.viewBobVertical = 0;
     this.viewBobLateral = 0;
+    this.deathViewFraction = 0;
 
     camera.rotation.order = 'YXZ';
   }
@@ -58,9 +69,29 @@ export class Player extends Fighter {
     this.yaw = ((((this.yaw + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
   }
 
-  /** Look steadies as the weapon comes up, so aiming is not merely a zoom. */
+  /** Field of view the camera is showing right now, hip to fully scoped. */
+  get currentFieldOfView() {
+    const optic = this.currentOptic;
+    if (optic === null) return CAMERA.fieldOfView;
+
+    return THREE.MathUtils.lerp(
+      CAMERA.fieldOfView,
+      scopedFieldOfView(optic.magnification),
+      this.aimFraction
+    );
+  }
+
+  /**
+   * Look slows with the zoom, so the same mouse travel moves the crosshair the
+   * same distance across the screen at any magnification. Screen offset runs
+   * through the tangent of the half-angle, so the multiplier is the ratio of
+   * those tangents; at full scope it reduces to exactly 1 / magnification.
+   */
   get lookSensitivityMultiplier() {
-    return THREE.MathUtils.lerp(1, AIM.sensitivityMultiplier, this.aimFraction);
+    return (
+      Math.tan((this.currentFieldOfView * Math.PI) / 360) /
+      Math.tan((CAMERA.fieldOfView * Math.PI) / 360)
+    );
   }
 
   /** @param {number} degreesPerSecond */
@@ -104,6 +135,17 @@ export class Player extends Fighter {
 
     this.step(deltaSeconds, collisionWorld, intent);
     this.updateViewBob(deltaSeconds);
+    this.updateDeathView(deltaSeconds);
+  }
+
+  updateDeathView(deltaSeconds) {
+    const target = this.alive ? 0 : 1;
+    const rate = deltaSeconds / (this.alive ? DEATH_VIEW.recoverSeconds : DEATH_VIEW.dropSeconds);
+    this.deathViewFraction += THREE.MathUtils.clamp(
+      target - this.deathViewFraction,
+      -rate,
+      rate
+    );
   }
 
   updateViewBob(deltaSeconds) {
@@ -131,16 +173,25 @@ export class Player extends Fighter {
       scratchEyePosition.y += this.viewBobVertical;
     }
 
+    // Eased after the bob so the bob is blended away rather than fought, and
+    // the target height is measured from the feet, which sit on the ground.
+    const dying = THREE.MathUtils.smoothstep(this.deathViewFraction, 0, 1);
+    scratchEyePosition.y = THREE.MathUtils.lerp(
+      scratchEyePosition.y,
+      this.position.y + DEATH_VIEW.heightMetres,
+      dying
+    );
+
     this.camera.position.copy(scratchEyePosition);
-    this.camera.rotation.set(this.pitch + this.recoilPitch, this.yaw + this.recoilYaw, 0);
+    this.camera.rotation.set(
+      this.pitch + this.recoilPitch - DEATH_VIEW.pitchRadians * dying,
+      this.yaw + this.recoilYaw,
+      DEATH_VIEW.rollRadians * dying
+    );
 
     // Only fov is touched here; Game.resize owns aspect, so neither overwrites
     // the other's value and the matrix is rebuilt only while the zoom moves.
-    const fieldOfView = THREE.MathUtils.lerp(
-      CAMERA.fieldOfView,
-      CAMERA.fieldOfView * AIM.fieldOfViewMultiplier,
-      this.aimFraction
-    );
+    const fieldOfView = this.currentFieldOfView;
     if (this.camera.fov !== fieldOfView) {
       this.camera.fov = fieldOfView;
       this.camera.updateProjectionMatrix();

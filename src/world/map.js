@@ -13,7 +13,8 @@
  *   materials: ReturnType<import('./materials.js').createMaterialLibrary>,
  *   lighting: ReturnType<import('./lighting.js').createLighting>,
  *   coverPoints: import('three').Vector3[],
- *   concealment: import('./concealment.js').ConcealmentField
+ *   concealment: import('./concealment.js').ConcealmentField,
+ *   wheat: ReturnType<typeof import('./props.js').createWheatPatches>
  * }}
  */
 
@@ -32,6 +33,8 @@ import {
   createTrees,
   createOuterScenery
 } from './props.js';
+
+export { updateWind } from './props.js';
 
 /** Far wider than the visual extent so the horizon dissolves into fog, not an edge. */
 const GROUND_EXTENT = 260;
@@ -74,7 +77,8 @@ export function buildFarm({ scene, collisionWorld, random, dayCycleKey }) {
   group.add(createHayBales(materials, collisionWorld, random));
   group.add(createCropRows(materials, random));
   group.add(createTrees(materials, collisionWorld, random));
-  group.add(createWheatPatches(materials, collisionWorld, concealment, random));
+  const wheat = createWheatPatches(materials, collisionWorld, concealment, random);
+  group.add(wheat.mesh);
   group.add(createOuterScenery(materials, random));
 
   scene.add(group);
@@ -84,7 +88,8 @@ export function buildFarm({ scene, collisionWorld, random, dayCycleKey }) {
     materials,
     lighting,
     coverPoints: coverPoints.filter((point) => isUsableCoverPoint(point, collisionWorld)),
-    concealment
+    concealment,
+    wheat
   };
 }
 

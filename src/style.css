@@ -1006,3 +1006,145 @@ html, body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
 }
+
+/* ---------------------------------------------------------------------- */
+/* HUD: sniper scope                                                       */
+/* ---------------------------------------------------------------------- */
+
+.hud {
+  --hud-scope: 0;
+}
+
+/* The ordinary crosshair clears out well before the lens is readable. */
+.hud-crosshair-line {
+  opacity: calc(
+    (1 - var(--hud-crosshair-aim)) * clamp(0, 1 - var(--hud-scope) * 4, 1)
+  );
+}
+
+.hud-crosshair-dot {
+  opacity: clamp(0, 1 - var(--hud-scope) * 4, 1);
+}
+
+.hud-scope {
+  --hud-scope-lens-diameter: 84vmin;
+  --hud-scope-reticle-color: var(--text-primary);
+  --hud-scope-reticle-gap: 9px;
+  --hud-scope-reticle-pitch: 26px;
+  position: absolute;
+  inset: 0;
+  opacity: var(--hud-scope);
+}
+
+/*
+ * The surround is one huge hard-edged box-shadow spread off a circle rather
+ * than a radial-gradient mask: the border-radius rasterizer gives a clean
+ * antialiased edge at any size, and vmin keeps the lens round and on screen
+ * on every aspect ratio.
+ */
+.hud-scope-lens {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--hud-scope-lens-diameter);
+  height: var(--hud-scope-lens-diameter);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(calc(1.12 - 0.12 * var(--hud-scope)));
+  box-shadow:
+    0 0 0 100vmax #000,
+    inset 0 0 0 2px rgba(10, 9, 7, 0.95),
+    inset 0 0 90px 26px rgba(0, 0, 0, 0.6);
+}
+
+.hud-scope-reticle {
+  position: absolute;
+  inset: 11%;
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.85));
+}
+
+.hud-scope-reticle-arm {
+  position: absolute;
+}
+
+.hud-scope-reticle-arm--horizontal {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 9px;
+  transform: translateY(-50%);
+}
+
+.hud-scope-reticle-arm--vertical {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  transform: translateX(-50%);
+}
+
+.hud-scope-reticle-arm::before,
+.hud-scope-reticle-arm::after {
+  content: '';
+  position: absolute;
+}
+
+/* Each half carries the hairline plus its mil marks, counted out from the gap. */
+.hud-scope-reticle-arm--horizontal::before {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: calc(50% + var(--hud-scope-reticle-gap));
+  background:
+    linear-gradient(var(--hud-scope-reticle-color), var(--hud-scope-reticle-color))
+      left center / 100% 1px no-repeat,
+    repeating-linear-gradient(
+      to left,
+      var(--hud-scope-reticle-color) 0 1px,
+      transparent 1px var(--hud-scope-reticle-pitch)
+    );
+}
+
+.hud-scope-reticle-arm--horizontal::after {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: calc(50% + var(--hud-scope-reticle-gap));
+  background:
+    linear-gradient(var(--hud-scope-reticle-color), var(--hud-scope-reticle-color))
+      left center / 100% 1px no-repeat,
+    repeating-linear-gradient(
+      to right,
+      var(--hud-scope-reticle-color) 0 1px,
+      transparent 1px var(--hud-scope-reticle-pitch)
+    );
+}
+
+.hud-scope-reticle-arm--vertical::before {
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: calc(50% + var(--hud-scope-reticle-gap));
+  background:
+    linear-gradient(var(--hud-scope-reticle-color), var(--hud-scope-reticle-color))
+      center top / 1px 100% no-repeat,
+    repeating-linear-gradient(
+      to top,
+      var(--hud-scope-reticle-color) 0 1px,
+      transparent 1px var(--hud-scope-reticle-pitch)
+    );
+}
+
+.hud-scope-reticle-arm--vertical::after {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: calc(50% + var(--hud-scope-reticle-gap));
+  background:
+    linear-gradient(var(--hud-scope-reticle-color), var(--hud-scope-reticle-color))
+      center top / 1px 100% no-repeat,
+    repeating-linear-gradient(
+      to bottom,
+      var(--hud-scope-reticle-color) 0 1px,
+      transparent 1px var(--hud-scope-reticle-pitch)
+    );
+}

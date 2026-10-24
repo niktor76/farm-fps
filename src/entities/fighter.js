@@ -6,7 +6,7 @@ import {
   STAMINA,
   MOVEMENT_ACCURACY,
   AIM,
-  AIM_SPREAD_OVERRIDES,
+  OPTICS,
   FEEL_PRESETS,
   resolveWeapons,
   jumpLaunchVelocity
@@ -59,6 +59,7 @@ export class Fighter {
     this.recoilPitch = 0;
     this.recoilYaw = 0;
     this.aimFraction = 0;
+    this.aimedWeaponIndex = this.weaponIndex;
 
     this.staminaSeconds = STAMINA.maximumSeconds;
     this.secondsSinceSprintStopped = 0;
@@ -101,14 +102,28 @@ export class Fighter {
     return this.staminaSeconds / STAMINA.maximumSeconds;
   }
 
-  get effectiveSpread() {
-    const weapon = this.currentWeapon;
-    if (weapon.kind !== 'gun') return 0;
+  /** The optic the active weapon aims through, or null for a weapon that cannot aim. */
+  get currentOptic() {
+    return OPTICS[this.currentWeapon.id] ?? null;
+  }
 
-    const aimedMultiplier = AIM_SPREAD_OVERRIDES[weapon.id] ?? AIM.spreadMultiplier;
+  get canAim() {
+    return this.currentOptic !== null;
+  }
+
+  /** Aim fraction for optics that draw a scope overlay, zero for every other weapon. */
+  get scopeFraction() {
+    const optic = this.currentOptic;
+    if (optic === null || !optic.drawsScopeOverlay) return 0;
+    return this.aimFraction;
+  }
+
+  get effectiveSpread() {
+    if (this.currentWeapon.kind !== 'gun') return 0;
+
     return (
       (this.currentSpread + this.movementSpread) *
-      THREE.MathUtils.lerp(1, aimedMultiplier, this.aimFraction)
+      THREE.MathUtils.lerp(1, this.currentOptic.spreadMultiplier, this.aimFraction)
     );
   }
 
@@ -182,6 +197,7 @@ export class Fighter {
     this.recoilPitch = 0;
     this.recoilYaw = 0;
     this.aimFraction = 0;
+    this.aimedWeaponIndex = this.weaponIndex;
     this.staminaSeconds = STAMINA.maximumSeconds;
     this.secondsSinceSprintStopped = 0;
     this.sprintAllowed = true;
@@ -293,16 +309,27 @@ export class Fighter {
   }
 
   /**
-   * Eases toward the aim wish over AIM.transitionSeconds. A sprint drops the
-   * aim rather than being blocked by it, so the sprint key always sprints.
+   * Eases toward the aim wish over the active optic's scopeInSeconds. A weapon
+   * without an optic cannot aim. Changing weapon drops the aim, so a scope is
+   * always raised at the rate of the weapon that is actually in hand. A sprint
+   * drops the aim rather than being blocked by it, so the sprint key always
+   * sprints.
    */
   updateAimFraction(deltaSeconds, intent) {
-    const wantsAim =
-      intent.wantsAim &&
-      this.currentWeapon.kind === 'gun' &&
-      !(AIM.sprintCancelsAim && this.sprinting);
+    if (this.weaponIndex !== this.aimedWeaponIndex) {
+      this.aimedWeaponIndex = this.weaponIndex;
+      this.aimFraction = 0;
+    }
 
-    const rate = deltaSeconds / AIM.transitionSeconds;
+    const optic = this.currentOptic;
+    if (optic === null) {
+      this.aimFraction = 0;
+      return;
+    }
+
+    const wantsAim = intent.wantsAim && !(AIM.sprintCancelsAim && this.sprinting);
+
+    const rate = deltaSeconds / optic.scopeInSeconds;
     const target = wantsAim ? 1 : 0;
     this.aimFraction += THREE.MathUtils.clamp(target - this.aimFraction, -rate, rate);
   }
@@ -385,7 +412,10 @@ export class Fighter {
       speed = this.feel.walkSpeed;
     }
 
-    return speed * THREE.MathUtils.lerp(1, AIM.movementSpeedMultiplier, this.aimFraction);
+    const optic = this.currentOptic;
+    if (optic === null) return speed;
+
+    return speed * THREE.MathUtils.lerp(1, optic.movementSpeedMultiplier, this.aimFraction);
   }
 
   integrateSubstep(substepSeconds, collisionWorld) {
