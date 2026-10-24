@@ -147,6 +147,11 @@ Decisions worth knowing before reading the code:
 - The view model (weapon in view) uses a depth-clear trick rather than a
   true second render pass.
 
+## Authors
+
+- Ben Staples
+- Viktor Steck
+
 ## Credits and licence
 
 Three.js (`three@0.186.1`) is the only dependency. No other third-party

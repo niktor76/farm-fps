@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "Browser based free-for-all first person shooter set on a farm, built with Three.js.",
+  "contributors": [
+    "Ben Staples",
+    "Viktor Steck"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
