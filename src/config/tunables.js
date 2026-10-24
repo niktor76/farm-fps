@@ -592,3 +592,14 @@ export function scopedFieldOfView(magnification) {
   const halfBase = (CAMERA.fieldOfView * Math.PI) / 360;
   return (2 * Math.atan(Math.tan(halfBase) / magnification) * 180) / Math.PI;
 }
+
+/**
+ * Health regeneration. Nothing happens for delaySeconds after the last hit,
+ * then health returns in steps rather than continuously, so a fighter who
+ * breaks contact recovers on a predictable clock.
+ */
+export const REGENERATION = {
+  delaySeconds: 6,
+  intervalSeconds: 2,
+  fractionOfMaximum: 0.03
+};

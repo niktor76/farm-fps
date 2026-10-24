@@ -5,6 +5,7 @@ import {
   SIMULATION,
   STAMINA,
   MOVEMENT_ACCURACY,
+  REGENERATION,
   AIM,
   OPTICS,
   FEEL_PRESETS,
@@ -61,6 +62,11 @@ export class Fighter {
     this.aimFraction = 0;
     this.aimedWeaponIndex = this.weaponIndex;
 
+    this.secondsSinceDamaged = REGENERATION.delaySeconds;
+    this.regenerationTimer = 0;
+
+    this.secondsSinceDamaged = REGENERATION.delaySeconds;
+    this.regenerationTimer = 0;
     this.staminaSeconds = STAMINA.maximumSeconds;
     this.secondsSinceSprintStopped = 0;
     this.sprintAllowed = true;
@@ -167,6 +173,8 @@ export class Fighter {
 
     this.health -= amount;
     this.lastAttackerId = attackerId;
+    this.secondsSinceDamaged = 0;
+    this.regenerationTimer = 0;
 
     if (this.health > 0) return { killed: false, remaining: this.health };
 
@@ -220,6 +228,7 @@ export class Fighter {
       return;
     }
 
+    this.updateRegeneration(deltaSeconds);
     this.updateCrouch(deltaSeconds, collisionWorld, intent.wantsCrouch);
     this.updateStamina(deltaSeconds, intent);
     this.updateAimFraction(deltaSeconds, intent);
@@ -238,6 +247,26 @@ export class Fighter {
     for (let i = 0; i < SIMULATION.movementSubsteps; i += 1) {
       this.integrateSubstep(substepSeconds, collisionWorld);
     }
+  }
+
+  /** Health returns in steps once the fighter has been out of contact long enough. */
+  updateRegeneration(deltaSeconds) {
+    this.secondsSinceDamaged += deltaSeconds;
+
+    if (this.secondsSinceDamaged < REGENERATION.delaySeconds) return;
+    if (this.health >= FIGHTER.maximumHealth) {
+      this.regenerationTimer = 0;
+      return;
+    }
+
+    this.regenerationTimer += deltaSeconds;
+    if (this.regenerationTimer < REGENERATION.intervalSeconds) return;
+
+    this.regenerationTimer -= REGENERATION.intervalSeconds;
+    this.health = Math.min(
+      FIGHTER.maximumHealth,
+      this.health + FIGHTER.maximumHealth * REGENERATION.fractionOfMaximum
+    );
   }
 
   updateCrouch(deltaSeconds, collisionWorld, wantsCrouch) {

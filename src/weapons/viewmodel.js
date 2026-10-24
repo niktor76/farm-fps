@@ -3,14 +3,16 @@
  * and recoil. Without it the screen is empty and the game does not read as a
  * first person shooter (DEC-18).
  *
- * The models are parented to the camera, so game.js must have the camera in
- * the scene graph (scene.add(camera)) for them to render.
+ * The weapon lives in its own scene and is drawn by its own camera in a second
+ * pass, after the world and after a depth clear. That is what keeps a wall from
+ * cutting into the model, and it is also what stops an optic from magnifying
+ * the gun: the view camera's field of view is a constant, so narrowing the main
+ * camera for a 2x pistol scope or a 6x telescopic sight zooms the world without
+ * touching the weapon. Materials are therefore ordinary opaque ones, sorted and
+ * depth tested among themselves as usual.
  *
- * Clipping through nearby walls is solved without a second render pass: every
- * view model mesh renders in the transparent queue at a high renderOrder, and
- * a zero-opacity sentinel scheduled just before them clears the depth buffer.
- * Depth testing inside the model therefore still works, while nothing in the
- * world can occlude it.
+ * The view camera sits at the origin looking down -Z and never moves, so the
+ * player's position and look angles feed only the pose offsets below.
  *
  * Owned by PH-5-weapons.
  */
@@ -20,9 +22,26 @@ import { OPTICS } from '../config/tunables.js';
 import { mergeByMaterial } from '../world/materials.js';
 
 const TWO_PI = Math.PI * 2;
+const DEGREES_TO_HALF_RADIANS = Math.PI / 360;
 
-const RENDER_ORDER = 2000;
-const SENTINEL_RENDER_ORDER = RENDER_ORDER - 1;
+/**
+ * Fixed field of view for the weapon pass.
+ *
+ * Below the world's 75 so a 0.3 metre object 0.4 metres from the eye is less
+ * foreshortened and the gun reads with some weight, but not as low as the 60
+ * that shooters with a 90 degree world use: against our 75 that same ratio is
+ * about 50, which would enlarge the weapon by a third at exactly the moment the
+ * aim pose needs the middle of the screen clear.
+ */
+const VIEW_FIELD_OF_VIEW = 70;
+const VIEW_NEAR_PLANE = 0.01;
+const VIEW_FAR_PLANE = 5;
+
+const KEY_LIGHT_COLOR = 0xfff2d8;
+const KEY_LIGHT_INTENSITY = 2.4;
+const FILL_SKY_COLOR = 0xc6d8ec;
+const FILL_GROUND_COLOR = 0x40433f;
+const FILL_INTENSITY = 1.1;
 
 const BOB_CYCLES_PER_METRE = 0.55;
 const BOB_LATERAL_METRES = 0.022;
@@ -64,37 +83,39 @@ const SCOPE_STEADY_FACTOR = 0.85;
  * group sits once the weapon is fully raised, and it is derived from the sight
  * the weapon actually carries (OPTICS in tunables), not from a shared offset:
  *
- * - iron sights and the shotgun's bead land their sight line a few millimetres
- *   below the crosshair, which is how a shooter sees a post inside a notch;
- * - the revolver's pistol scope and the rifle's optical sight put their optical
- *   axis on the crosshair, so they ride higher than irons;
- * - the sniper's telescopic sight puts the SCOPE tube's axis on the crosshair,
- *   which is far higher again because the tube sits on rings above the receiver.
+ * - the pistol, revolver, rifle and shotgun put the TOP of their sight on the
+ *   crosshair, which is both how a sight picture works and what leaves the rest
+ *   of the screen above the crosshair clear to see the target through;
+ * - the sniper puts the SCOPE tube's axis there instead, because that optic is
+ *   looked through rather than over, which is far higher again since the tube
+ *   rides on rings above the receiver.
  *
- * Every aim Y is the negated sight height of that model's own geometry times
- * its scale, so moving a sight in a builder means moving the number here too.
+ * So every aim Y is the negated sight height of that model's own geometry times
+ * its scale, and moving a sight in a builder means moving the number here too.
+ * Aim Z only comes closer to the eye for the two handguns; a long gun is already
+ * at full extension, and pulling it in would push its butt through the eye.
  * Melee weapons cannot aim, so their aim entry is null.
  */
 const WEAPON_POSES = {
   pistol: {
     rest: { position: [0.17, -0.17, -0.38], rotation: [0.02, -0.18, 0], scale: 1.5 },
-    aim: { position: [0, -0.09, -0.33], rotation: [0, 0, 0] }
+    aim: { position: [0, -0.093, -0.33], rotation: [0, 0, 0] }
   },
   revolver: {
     rest: { position: [0.18, -0.18, -0.4], rotation: [0.02, -0.17, 0], scale: 1.25 },
-    aim: { position: [0, -0.06, -0.32], rotation: [0, 0, 0] }
+    aim: { position: [0, -0.07, -0.33], rotation: [0, 0, 0] }
   },
   rifle: {
     rest: { position: [0.19, -0.2, -0.42], rotation: [0.02, -0.15, 0], scale: 1.15 },
-    aim: { position: [0, -0.083, -0.36], rotation: [0, 0, 0] }
+    aim: { position: [0, -0.1, -0.42], rotation: [0, 0, 0] }
   },
   shotgun: {
     rest: { position: [0.19, -0.2, -0.42], rotation: [0.02, -0.15, 0], scale: 1.1 },
-    aim: { position: [0, -0.06, -0.4], rotation: [0, 0, 0] }
+    aim: { position: [0, -0.062, -0.42], rotation: [0, 0, 0] }
   },
   sniper: {
     rest: { position: [0.2, -0.22, -0.44], rotation: [0.02, -0.14, 0], scale: 1.0 },
-    aim: { position: [0, -0.105, -0.3], rotation: [0, 0, 0] }
+    aim: { position: [0, -0.105, -0.44], rotation: [0, 0, 0] }
   },
   karambit: {
     rest: { position: [0.21, -0.19, -0.34], rotation: [-0.15, -0.45, 0.35], scale: 1.7 },
@@ -133,11 +154,27 @@ export class ViewModel {
    */
   constructor(camera, materials) {
     this.camera = camera;
+
+    this.scene = new THREE.Scene();
+    this.viewCamera = new THREE.PerspectiveCamera(
+      VIEW_FIELD_OF_VIEW,
+      camera.aspect,
+      VIEW_NEAR_PLANE,
+      VIEW_FAR_PLANE
+    );
+    this.scene.add(this.viewCamera);
+    this.viewSpread = Math.tan(VIEW_FIELD_OF_VIEW * DEGREES_TO_HALF_RADIANS);
+
+    const keyLight = new THREE.DirectionalLight(KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY);
+    keyLight.position.set(-0.6, 1, 0.8);
+    this.scene.add(keyLight);
+    this.scene.add(
+      new THREE.HemisphereLight(FILL_SKY_COLOR, FILL_GROUND_COLOR, FILL_INTENSITY)
+    );
+
     this.group = new THREE.Group();
     this.group.matrixAutoUpdate = true;
-    camera.add(this.group);
-
-    this.group.add(createDepthClearSentinel());
+    this.scene.add(this.group);
 
     const viewMaterials = createViewMaterials(materials);
     const builders = {
@@ -156,10 +193,7 @@ export class ViewModel {
       const model = mergeByMaterial(builders[weaponId](viewMaterials), false, true);
       model.scale.setScalar(WEAPON_POSES[weaponId].rest.scale);
       model.visible = false;
-      for (const mesh of model.children) {
-        mesh.renderOrder = RENDER_ORDER;
-        mesh.frustumCulled = false;
-      }
+      for (const mesh of model.children) mesh.frustumCulled = false;
 
       const anchorDefinition = MUZZLE_ANCHORS[weaponId];
       const anchor = new THREE.Object3D();
@@ -220,6 +254,16 @@ export class ViewModel {
     return this.activeMuzzleAnchor !== null;
   }
 
+  /** The weapon pass. The caller owns clearing; this only draws. */
+  render(renderer) {
+    renderer.render(this.scene, this.viewCamera);
+  }
+
+  resize(aspect) {
+    this.viewCamera.aspect = aspect;
+    this.viewCamera.updateProjectionMatrix();
+  }
+
   /**
    * The optic the active weapon aims through, as the shared OPTICS entry, or
    * null for a melee weapon. The interface layer reads `sight`, `magnification`
@@ -243,34 +287,48 @@ export class ViewModel {
    * `update` applied: pose, bob, sway, crouch, sprint drop, fire kick, reload
    * dip and melee sweep.
    *
-   * `updateWorldMatrix(true, false)` walks the camera -> group -> model -> anchor
-   * chain and recomposes each local matrix from its current position/rotation,
-   * so the result is this frame's transform rather than the one three.js last
-   * flushed during render.
+   * `updateWorldMatrix(true, false)` walks the group -> model -> anchor chain
+   * and recomposes each local matrix from its current position/rotation, so the
+   * result is this frame's transform rather than the one three.js last flushed
+   * during render.
    *
-   * The view model shares the scene's camera and projection, so this point
-   * projects to the pixel the barrel tip is drawn at — usable as a world-space
-   * effect origin without any correction along the aim direction.
+   * The anchor lives in the weapon scene, whose camera sits at the origin, so
+   * its position is already a camera space coordinate. Two steps turn it into a
+   * world one a flash or a tracer can use: widen x and y from the weapon pass's
+   * fixed field of view to the main camera's current one, so the point keeps
+   * landing on the pixel the barrel tip is drawn at however far an optic has
+   * zoomed the world in, then carry it through the main camera's transform.
    *
    * @param {import('three').Vector3} target
    */
   getMuzzleWorldPosition(target) {
     const anchor = this.activeMuzzleAnchor;
     anchor.updateWorldMatrix(true, false);
-    return target.setFromMatrixPosition(anchor.matrixWorld);
+    this.camera.updateWorldMatrix(true, false);
+
+    target.setFromMatrixPosition(anchor.matrixWorld);
+    const spread = Math.tan(this.camera.fov * DEGREES_TO_HALF_RADIANS) / this.viewSpread;
+    target.x *= spread;
+    target.y *= spread;
+
+    return target.applyMatrix4(this.camera.matrixWorld);
   }
 
   /**
    * The direction the active weapon points, in world space. Normalised because
-   * the models carry a non-unit scale.
+   * the models carry a non-unit scale, then rotated out of weapon scene space
+   * by the main camera's orientation.
    *
    * @param {import('three').Vector3} target
    */
   getMuzzleWorldDirection(target) {
     const anchor = this.activeMuzzleAnchor;
     anchor.updateWorldMatrix(true, false);
+    this.camera.updateWorldMatrix(true, false);
+
     const elements = anchor.matrixWorld.elements;
-    return target.set(-elements[8], -elements[9], -elements[10]).normalize();
+    target.set(-elements[8], -elements[9], -elements[10]).normalize();
+    return target.transformDirection(this.camera.matrixWorld);
   }
 
   update(deltaSeconds, fighter) {
@@ -315,22 +373,31 @@ export class ViewModel {
     const poseRotationY = restRotation[1] + (this.aimRotation[1] - restRotation[1]) * scope;
     const poseRotationZ = restRotation[2] + (this.aimRotation[2] - restRotation[2]) * scope;
 
+    // The crouch raise and the sprint drop are hip carry flourishes: they say
+    // something about how the weapon is being held, and they are meaningless
+    // once it is up against the eye. Left at full strength they fought the aim
+    // pose -- crouching lifted a sighted weapon 3 cm and tipped its muzzle 5
+    // degrees down, which put the body over the crosshair rather than under it.
+    const hipWeight = 1 - scope;
+    const crouchAmount = fighter.crouchAmount * hipWeight;
+    const sprintCarry = sprintAmount * hipWeight;
+
     let positionX = poseX + bobLateral + swayLateral;
     let positionY =
       poseY +
       bobVertical +
       swayVertical +
-      fighter.crouchAmount * CROUCH_RAISE_METRES -
-      sprintAmount * SPRINT_DROP_METRES;
+      crouchAmount * CROUCH_RAISE_METRES -
+      sprintCarry * SPRINT_DROP_METRES;
     let positionZ = poseZ;
 
     let rotationX =
       poseRotationX +
       swayVertical * SWAY_ROTATION_GAIN +
-      fighter.crouchAmount * CROUCH_PITCH_RADIANS +
-      sprintAmount * SPRINT_PITCH_RADIANS;
+      crouchAmount * CROUCH_PITCH_RADIANS +
+      sprintCarry * SPRINT_PITCH_RADIANS;
     let rotationY =
-      poseRotationY - swayLateral * SWAY_ROTATION_GAIN + sprintAmount * SPRINT_YAW_RADIANS;
+      poseRotationY - swayLateral * SWAY_ROTATION_GAIN + sprintCarry * SPRINT_YAW_RADIANS;
     let rotationZ = poseRotationZ + bobRoll;
 
     if (this.firingTimer > 0) {
@@ -432,8 +499,7 @@ export class ViewModel {
   }
 
   dispose() {
-    this.camera.remove(this.group);
-    this.group.traverse((object) => {
+    this.scene.traverse((object) => {
       if (object.geometry) object.geometry.dispose();
       if (object.material) object.material.dispose();
     });
@@ -446,29 +512,9 @@ export class ViewModel {
 }
 
 /**
- * Draws nothing, but its onBeforeRender wipes the depth buffer just before the
- * weapon meshes are drawn, which is what keeps a wall from cutting into the
- * model when the player stands against it.
- */
-function createDepthClearSentinel() {
-  const material = new THREE.MeshBasicMaterial({
-    transparent: true,
-    opacity: 0,
-    depthTest: false,
-    depthWrite: false
-  });
-  const sentinel = new THREE.Mesh(new THREE.PlaneGeometry(0.001, 0.001), material);
-  sentinel.position.set(0, 0, -0.1);
-  sentinel.renderOrder = SENTINEL_RENDER_ORDER;
-  sentinel.frustumCulled = false;
-  sentinel.onBeforeRender = (renderer) => renderer.clearDepth();
-  return sentinel;
-}
-
-/**
  * Library materials are shared with the world, so the view model gets clones:
- * it needs its own queue placement, and the darkened variants do not exist in
- * the library.
+ * the weapon scene lights them differently, and the darkened variants do not
+ * exist in the library.
  */
 function createViewMaterials(materials) {
   const gunMetal = materials.metal.clone();
@@ -480,13 +526,6 @@ function createViewMaterials(materials) {
 
   const wood = materials.wood.clone();
   const rusted = materials.rustedMetal.clone();
-
-  for (const material of [gunMetal, darkMetal, wood, rusted]) {
-    material.transparent = true;
-    material.opacity = 1;
-    material.depthTest = true;
-    material.depthWrite = true;
-  }
 
   return { gunMetal, darkMetal, wood, rusted };
 }
@@ -550,7 +589,7 @@ function buildRevolver(materials) {
     ),
     part(new THREE.BoxGeometry(0.022, 0.01, 0.2), materials.gunMetal, 0, 0.034, -0.195, 0, 0, 0),
     part(new THREE.BoxGeometry(0.02, 0.018, 0.18), materials.gunMetal, 0, -0.002, -0.19, 0, 0, 0),
-    part(new THREE.BoxGeometry(0.012, 0.04, 0.016), materials.darkMetal, 0, 0.058, 0.045, -0.45, 0, 0),
+    part(new THREE.BoxGeometry(0.012, 0.03, 0.014), materials.darkMetal, 0, 0.04, 0.05, -0.45, 0, 0),
     part(new THREE.BoxGeometry(0.01, 0.03, 0.01), materials.gunMetal, 0, -0.035, 0.01, 0, 0, 0),
     part(
       new THREE.TorusGeometry(0.026, 0.004, 4, 10),

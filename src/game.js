@@ -39,6 +39,8 @@ export class Game {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.autoClear = false;
+    this.renderer.info.autoReset = false;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -343,7 +345,11 @@ export class Game {
       for (const bot of this.bots) updateNametag(bot.nametag, bot, this.camera);
     }
 
+    this.renderer.info.reset();
+    this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
+    this.renderer.clearDepth();
+    this.viewModel.render(this.renderer);
     this.stats.sampleFrame(frameSeconds, this.renderer);
     this.debugPanel.update(this);
   }
@@ -354,6 +360,7 @@ export class Game {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this.viewModel.resize(width / height);
   }
 
   dispose() {

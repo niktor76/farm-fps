@@ -9,7 +9,7 @@
  * Owned by PH-3-audio.
  */
 
-import { AUDIO } from '../config/tunables.js';
+import { AUDIO, DEFAULT_FEEL, resolveWeapons } from '../config/tunables.js';
 import {
   createNoiseBuffer,
   createImpulseResponse,
@@ -26,7 +26,9 @@ import {
  */
 const SOUND_RECIPES = {
   pistol: { kind: 'gunshot', reverb: 0.9, sharpness: 0.7, body: 0.55, duration: 0.45, gain: 0.5 },
+  revolver: { kind: 'gunshot', reverb: 1.05, sharpness: 0.5, body: 0.95, duration: 0.62, gain: 0.74 },
   rifle: { kind: 'gunshot', reverb: 0.9, sharpness: 1.0, body: 0.4, duration: 0.32, gain: 0.55 },
+  sniper: { kind: 'gunshot', reverb: 1.25, sharpness: 1.0, body: 0.8, duration: 0.95, gain: 0.9 },
   shotgun: { kind: 'gunshot', reverb: 1.0, sharpness: 0.35, body: 1.0, duration: 0.8, gain: 0.7 },
   melee: {
     kind: 'whoosh',
@@ -121,6 +123,7 @@ const NO_OPTIONS = Object.freeze({});
 
 export class AudioEngine {
   constructor() {
+    assertEveryGunHasASound();
     this.context = new AudioContext({ latencyHint: 'interactive' });
 
     this.compressor = this.context.createDynamicsCompressor();
@@ -314,4 +317,19 @@ export class AudioEngine {
 function releaseVoice(voice) {
   for (const source of voice.sources) source.disconnect();
   for (const node of voice.bus.nodes) node.disconnect();
+}
+
+/**
+ * A weapon with no recipe throws from `play`, which runs inside the fixed step
+ * and would abort the frame. Worse, it only throws once the audio context is
+ * running, so it is invisible anywhere audio is suspended. Fail at startup.
+ */
+function assertEveryGunHasASound() {
+  const missing = resolveWeapons(DEFAULT_FEEL)
+    .filter((weapon) => weapon.kind === 'gun' && !SOUND_RECIPES[weapon.id])
+    .map((weapon) => weapon.id);
+
+  if (missing.length > 0) {
+    throw new Error(`weapons with no sound recipe: ${missing.join(', ')}`);
+  }
 }
