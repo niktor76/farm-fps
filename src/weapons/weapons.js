@@ -37,10 +37,21 @@ export class WeaponSystem {
    *   audio: import('../audio/audio.js').AudioEngine,
    *   random: import('../core/rng.js').Random,
    *   onDamage: (target, amount, attacker) => { killed: boolean, remaining: number },
-   *   onKill: (victim, killer, weapon) => void
+   *   onKill: (victim, killer, weapon) => void,
+   *   plantSeed: (eyePosition, aimDirection) => boolean
    * }} options
    */
-  constructor({ collisionWorld, fighters, effects, audio, random, onDamage, onKill, resolveMuzzle }) {
+  constructor({
+    collisionWorld,
+    fighters,
+    effects,
+    audio,
+    random,
+    onDamage,
+    onKill,
+    resolveMuzzle,
+    plantSeed
+  }) {
     this.collisionWorld = collisionWorld;
     this.fighters = fighters;
     this.effects = effects;
@@ -49,6 +60,7 @@ export class WeaponSystem {
     this.onDamage = onDamage;
     this.onKill = onKill;
     this.resolveMuzzle = resolveMuzzle;
+    this.plantSeed = plantSeed;
 
     this.triggerWasHeld = new Map();
 
@@ -110,6 +122,7 @@ export class WeaponSystem {
     if (fighter.cooldownTimer > 0) return false;
 
     if (weapon.kind === 'melee') return this.fireMelee(fighter, weapon);
+    if (weapon.kind === 'tool') return this.useTool(fighter, weapon);
 
     if (fighter.reloading) {
       // A shell-by-shell reload is interruptible once there is something to fire.
@@ -179,6 +192,34 @@ export class WeaponSystem {
     return true;
   }
 
+  /**
+   * The seed bag. A charge is spent only when a patch is actually sown, so
+   * aiming at a wall or at the sky costs nothing but the cooldown.
+   */
+  useTool(fighter, weapon) {
+    if (fighter.reloading) return false;
+
+    if (fighter.currentMagazine === 0) {
+      this.playSound(fighter, 'empty', 1);
+      this.tryReload(fighter);
+      return false;
+    }
+
+    fighter.getEyePosition(scratchOrigin);
+    fighter.getAimDirection(scratchAim);
+
+    fighter.cooldownTimer = weapon.cooldownSeconds;
+
+    if (!this.plantSeed(scratchOrigin, scratchAim)) {
+      this.playSound(fighter, 'empty', 1);
+      return false;
+    }
+
+    fighter.magazines[fighter.weaponIndex] -= 1;
+    this.playSound(fighter, weapon.id, 1);
+    return true;
+  }
+
   fireMelee(fighter, weapon) {
     fighter.cooldownTimer = weapon.cooldownSeconds;
     this.playSound(fighter, 'melee', MELEE_PITCH[weapon.id]);
@@ -212,7 +253,7 @@ export class WeaponSystem {
 
   tryReload(fighter) {
     const weapon = fighter.currentWeapon;
-    if (weapon.kind !== 'gun') return false;
+    if (weapon.kind === 'melee') return false;
     if (fighter.reloading) return false;
     if (fighter.currentMagazine >= weapon.magazineSize) return false;
 

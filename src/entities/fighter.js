@@ -49,9 +49,8 @@ export class Fighter {
 
     this.weapons = resolveWeapons(feelKey);
     this.weaponIndex = 1;
-    this.magazines = this.weapons.map((weapon) =>
-      weapon.kind === 'gun' ? weapon.magazineSize : 0
-    );
+    // Melee has no magazine; guns and the seed bag both do.
+    this.magazines = this.weapons.map((weapon) => weapon.magazineSize ?? 0);
     this.cooldownTimer = 0;
     this.reloadTimer = 0;
     this.reloading = false;
@@ -210,9 +209,8 @@ export class Fighter {
     this.secondsSinceSprintStopped = 0;
     this.sprintAllowed = true;
     this.sprinting = false;
-    this.magazines = this.weapons.map((weapon) =>
-      weapon.kind === 'gun' ? weapon.magazineSize : 0
-    );
+    // Melee has no magazine; guns and the seed bag both do.
+    this.magazines = this.weapons.map((weapon) => weapon.magazineSize ?? 0);
   }
 
   /**

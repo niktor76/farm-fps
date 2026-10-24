@@ -126,6 +126,10 @@ const WEAPON_POSES = {
   pitchfork: {
     rest: { position: [0.22, -0.26, -0.4], rotation: [-0.04, -0.1, 0.1], scale: 0.8 },
     aim: null
+  },
+  seedbag: {
+    rest: { position: [0.21, -0.25, -0.4], rotation: [0.06, -0.22, 0.1], scale: 1.0 },
+    aim: null
   }
 };
 
@@ -146,7 +150,8 @@ const MUZZLE_ANCHORS = {
   shotgun: { position: [0, 0.024, -0.7], pitchX: 0 },
   sniper: { position: [0, 0.01, -1.0], pitchX: 0 },
   karambit: { position: [0, 0.0779, -0.1416], pitchX: 1.25 },
-  pitchfork: { position: [0, 0, -1.12], pitchX: 0 }
+  pitchfork: { position: [0, 0, -1.12], pitchX: 0 },
+  seedbag: { position: [0, 0.13, -0.15], pitchX: 0.5 }
 };
 
 export class ViewModel {
@@ -189,7 +194,8 @@ export class ViewModel {
       shotgun: buildShotgun,
       sniper: buildSniper,
       karambit: buildKarambit,
-      pitchfork: buildPitchfork
+      pitchfork: buildPitchfork,
+      seedbag: buildSeedBag
     };
 
     this.models = new Map();
@@ -548,7 +554,12 @@ function createViewMaterials(materials) {
   const wood = materials.wood.clone();
   const rusted = materials.rustedMetal.clone();
 
-  return { gunMetal, darkMetal, wood, rusted };
+  const sackcloth = materials.hay.clone();
+  sackcloth.color.setHex(0xb49a6a);
+
+  const grain = materials.wheat.clone();
+
+  return { gunMetal, darkMetal, wood, rusted, sackcloth, grain };
 }
 
 function part(geometry, material, x, y, z, rotationX, rotationY, rotationZ) {
@@ -885,6 +896,66 @@ function buildSniper(materials) {
       0.25,
       0,
       0.35
+    )
+  ];
+}
+
+/**
+ * A burlap seed sack, cinched at the neck and tipped forward so its mouth
+ * faces where the player is looking. The grain cone at the opening is what the
+ * muzzle anchor sits on, so the planting puff appears to come out of the sack.
+ */
+function buildSeedBag(materials) {
+  return [
+    part(
+      new THREE.CylinderGeometry(0.075, 0.105, 0.21, 10),
+      materials.sackcloth,
+      0,
+      -0.03,
+      -0.03,
+      0.18,
+      0,
+      0
+    ),
+    part(
+      new THREE.SphereGeometry(0.085, 10, 6),
+      materials.sackcloth,
+      0,
+      -0.115,
+      -0.012,
+      0,
+      0,
+      0
+    ),
+    part(
+      new THREE.CylinderGeometry(0.052, 0.072, 0.07, 10),
+      materials.sackcloth,
+      0,
+      0.082,
+      -0.062,
+      0.45,
+      0,
+      0
+    ),
+    part(
+      new THREE.TorusGeometry(0.052, 0.009, 5, 10),
+      materials.wood,
+      0,
+      0.098,
+      -0.07,
+      QUARTER_TURN + 0.45,
+      0,
+      0
+    ),
+    part(
+      new THREE.ConeGeometry(0.044, 0.055, 8),
+      materials.grain,
+      0,
+      0.126,
+      -0.088,
+      -0.45 + QUARTER_TURN * 2,
+      0,
+      0
     )
   ];
 }

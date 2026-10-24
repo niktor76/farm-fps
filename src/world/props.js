@@ -400,26 +400,7 @@ export function createWheatPatches(materials, collisionWorld, concealmentField, 
 
   for (const patch of patches) {
     concealmentField.addPatch(patch.centerX, patch.centerZ, patch.sizeX, patch.sizeZ);
-
-    const columns = Math.floor(patch.sizeX / WHEAT_STALK_SPACING);
-    const rows = Math.floor(patch.sizeZ / WHEAT_STALK_SPACING);
-    const originX = patch.centerX - (columns * WHEAT_STALK_SPACING) / 2;
-    const originZ = patch.centerZ - (rows * WHEAT_STALK_SPACING) / 2;
-
-    for (let column = 0; column < columns; column += 1) {
-      for (let row = 0; row < rows; row += 1) {
-        stalks.push({
-          x: originX + (column + 0.5) * WHEAT_STALK_SPACING + random.range(-WHEAT_STALK_JITTER, WHEAT_STALK_JITTER),
-          y: 0,
-          z: originZ + (row + 0.5) * WHEAT_STALK_SPACING + random.range(-WHEAT_STALK_JITTER, WHEAT_STALK_JITTER),
-          rotationY: random.range(0, Math.PI),
-          rotationZ: random.range(-WHEAT_STALK_LEAN, WHEAT_STALK_LEAN),
-          scaleX: random.range(0.85, 1.2),
-          scaleY: random.range(0.88, 1.12),
-          scaleZ: random.range(0.85, 1.2)
-        });
-      }
-    }
+    appendStalkPlacements(stalks, patch.centerX, patch.centerZ, patch.sizeX, patch.sizeZ, random);
   }
 
   applyWind(materials.wheat, CONCEALMENT.cropHeight, WIND.wheatAmplitude);
@@ -454,6 +435,60 @@ export function createWheatPatches(materials, collisionWorld, concealmentField, 
   }
 
   return { mesh, allocateStalks, commitStalks };
+}
+
+/**
+ * Lays a jittered grid of stalks over one patch footprint and appends them to
+ * `target`. Shared by the static field and by patches planted during the
+ * match, so a planted patch is indistinguishable from a grown one.
+ */
+export function appendStalkPlacements(target, centerX, centerZ, sizeX, sizeZ, random) {
+  const columns = Math.floor(sizeX / WHEAT_STALK_SPACING);
+  const rows = Math.floor(sizeZ / WHEAT_STALK_SPACING);
+  const originX = centerX - (columns * WHEAT_STALK_SPACING) / 2;
+  const originZ = centerZ - (rows * WHEAT_STALK_SPACING) / 2;
+
+  for (let column = 0; column < columns; column += 1) {
+    for (let row = 0; row < rows; row += 1) {
+      target.push({
+        x: originX + (column + 0.5) * WHEAT_STALK_SPACING + random.range(-WHEAT_STALK_JITTER, WHEAT_STALK_JITTER),
+        y: 0,
+        z: originZ + (row + 0.5) * WHEAT_STALK_SPACING + random.range(-WHEAT_STALK_JITTER, WHEAT_STALK_JITTER),
+        rotationY: random.range(0, Math.PI),
+        rotationZ: random.range(-WHEAT_STALK_LEAN, WHEAT_STALK_LEAN),
+        scaleX: random.range(0.85, 1.2),
+        scaleY: random.range(0.88, 1.12),
+        scaleZ: random.range(0.85, 1.2)
+      });
+    }
+  }
+
+  return target;
+}
+
+/** How many stalks a patch of this footprint lays down. */
+export function stalkCountForPatch(sizeX, sizeZ) {
+  return Math.floor(sizeX / WHEAT_STALK_SPACING) * Math.floor(sizeZ / WHEAT_STALK_SPACING);
+}
+
+/**
+ * Writes one block of stalks scaled uniformly by `growFraction`, so a planted
+ * patch rises out of the ground instead of appearing at full height. A
+ * fraction of 1 is the mature patch.
+ */
+export function writeStalkBlock(mesh, placements, firstIndex, growFraction) {
+  for (const [offset, placement] of placements.entries()) {
+    scratchPosition.set(placement.x, placement.y, placement.z);
+    scratchEuler.set(0, placement.rotationY, placement.rotationZ);
+    scratchQuaternion.setFromEuler(scratchEuler);
+    scratchScale.set(
+      placement.scaleX * growFraction,
+      placement.scaleY * growFraction,
+      placement.scaleZ * growFraction
+    );
+    scratchMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
+    mesh.setMatrixAt(firstIndex + offset, scratchMatrix);
+  }
 }
 
 /**
@@ -512,7 +547,7 @@ function overlapsAnyPatch(patches, candidate) {
 }
 
 /** Samples the candidate rectangle on a grid; any standing-height obstruction rejects it. */
-function patchHitsGeometry(collisionWorld, candidate) {
+export function patchHitsGeometry(collisionWorld, candidate) {
   const samplesX = Math.ceil(candidate.sizeX / WHEAT_CLEARANCE_SAMPLE_SPACING);
   const samplesZ = Math.ceil(candidate.sizeZ / WHEAT_CLEARANCE_SAMPLE_SPACING);
   const originX = candidate.centerX - candidate.sizeX / 2;

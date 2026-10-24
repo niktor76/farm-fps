@@ -49,6 +49,7 @@ const SOUND_RECIPES = {
     gain: 0.18
   },
   footstep: { kind: 'noise', reverb: 0.25, frequency: 420, duration: 0.12, gain: 0.3 },
+  seedbag: { kind: 'noise', reverb: 0.3, frequency: 900, duration: 0.3, gain: 0.32 },
   hit: {
     kind: 'blip',
     reverb: 0,
@@ -326,7 +327,7 @@ function releaseVoice(voice) {
  */
 function assertEveryGunHasASound() {
   const missing = resolveWeapons(DEFAULT_FEEL)
-    .filter((weapon) => weapon.kind === 'gun' && !SOUND_RECIPES[weapon.id])
+    .filter((weapon) => weapon.kind !== 'melee' && !SOUND_RECIPES[weapon.id])
     .map((weapon) => weapon.id);
 
   if (missing.length > 0) {

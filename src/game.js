@@ -17,6 +17,7 @@ import { DebugPanel } from './ui/debug.js';
 import { WeaponSystem } from './weapons/weapons.js';
 import { EffectSystem } from './weapons/effects.js';
 import { ViewModel } from './weapons/viewmodel.js';
+import { PlantingSystem } from './world/planting.js';
 import { CAMERA, MATCH } from './config/tunables.js';
 
 /**
@@ -88,6 +89,13 @@ export class Game {
     this.bots = this.createBots(settings);
     this.fighters = [this.player, ...this.bots];
 
+    this.planting = new PlantingSystem({
+      wheat: this.farm.wheat,
+      concealment: this.farm.concealment,
+      collisionWorld: this.collisionWorld,
+      random: this.random
+    });
+
     this.weapons = new WeaponSystem({
       collisionWorld: this.collisionWorld,
       fighters: this.fighters,
@@ -96,7 +104,8 @@ export class Game {
       random: this.random,
       onDamage: (target, amount, attacker) => this.applyDamage(target, amount, attacker),
       onKill: (victim, killer, weapon) => this.registerKill(victim, killer, weapon),
-      resolveMuzzle: (fighter, target) => this.resolveMuzzle(fighter, target)
+      resolveMuzzle: (fighter, target) => this.resolveMuzzle(fighter, target),
+      plantSeed: (eyePosition, aimDirection) => this.planting.plantFrom(eyePosition, aimDirection)
     });
 
     this.spawn(this.player);
@@ -276,6 +285,7 @@ export class Game {
     this.player.update(deltaSeconds, this.collisionWorld);
     this.updateBots(deltaSeconds);
     this.effects.update(deltaSeconds);
+    this.planting.step(deltaSeconds);
     this.input.endFrame();
   }
 
@@ -310,6 +320,7 @@ export class Game {
     if (this.weapons.tryFire(this.player, this.input.isDown('fire'))) {
       const weapon = this.player.currentWeapon;
       if (weapon.kind === 'melee') this.viewModel.playMelee(weapon.swingSeconds);
+      else if (weapon.kind === 'tool') this.viewModel.playMelee(weapon.cooldownSeconds);
       else this.viewModel.playFire();
     }
   }

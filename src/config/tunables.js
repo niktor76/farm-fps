@@ -165,7 +165,8 @@ export const WEAPON_ORDER = [
   'shotgun',
   'sniper',
   'karambit',
-  'pitchfork'
+  'pitchfork',
+  'seedbag'
 ];
 
 /**
@@ -276,6 +277,14 @@ const WEAPON_BASE = {
     reach: 2.5,
     swingSeconds: 0.9,
     swingArcRadians: 0.5
+  },
+  seedbag: {
+    label: 'Seed Bag',
+    kind: 'tool',
+    fireMode: 'semi',
+    magazineSize: 4,
+    reloadSeconds: 3,
+    cooldownSeconds: 0.8
   }
 };
 
@@ -294,6 +303,9 @@ export function resolveWeapons(feelKey) {
     if (base.kind === 'melee') {
       return { id, ...base, damage, cooldownSeconds: base.swingSeconds };
     }
+
+    // A tool deals no damage and has no rate of fire, so no preset applies.
+    if (base.kind === 'tool') return { id, ...base };
 
     const roundsPerMinute = feel.weaponRoundsPerMinute[id];
     return {
@@ -410,6 +422,19 @@ export const CONCEALMENT = {
   maximumPatchExtent: 13
 };
 
+/**
+ * The seed bag. Patches are a fixed extent so every planting reuses an
+ * identically sized block of the wheat mesh's spare instances, and the oldest
+ * patch is recycled once the cap is reached rather than growing the mesh.
+ */
+export const SEED = {
+  plantRange: 6,
+  patchExtent: 4,
+  growSeconds: 5,
+  minimumGapFromPatch: 1,
+  maximumLivePatches: 12
+};
+
 /** Selectable lighting conditions. Night stays playable rather than realistic. */
 export const DAY_CYCLES = {
   morning: {
@@ -520,7 +545,8 @@ export const WEAPON_SLOT_KEY_CODES = [
   'Digit4',
   'Digit5',
   'Digit6',
-  'Digit7'
+  'Digit7',
+  'Digit8'
 ];
 
 /**

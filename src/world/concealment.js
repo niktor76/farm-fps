@@ -37,6 +37,13 @@ export class ConcealmentField {
     return patch;
   }
 
+  /** Drops a patch previously returned by addPatch, so it stops concealing. */
+  removePatch(patch) {
+    const index = this.patches.indexOf(patch);
+    if (index === -1) throw new Error('patch is not in this field');
+    this.patches.splice(index, 1);
+  }
+
   /** True when this ground position lies inside any patch. */
   contains(x, z) {
     for (let index = 0; index < this.patches.length; index += 1) {
