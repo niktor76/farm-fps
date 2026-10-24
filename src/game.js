@@ -18,6 +18,7 @@ import { WeaponSystem } from './weapons/weapons.js';
 import { EffectSystem } from './weapons/effects.js';
 import { ViewModel } from './weapons/viewmodel.js';
 import { PlantingSystem } from './world/planting.js';
+import { Balloon } from './world/balloon.js';
 import { CAMERA, MATCH } from './config/tunables.js';
 
 /**
@@ -95,6 +96,15 @@ export class Game {
       concealment: this.farm.concealment,
       collisionWorld: this.collisionWorld,
       random: this.random
+    });
+
+    // After the waypoint graph and the spawn points, so neither treats the
+    // basket as ground the bots should path onto or spawn on.
+    this.balloon = new Balloon({
+      scene: this.scene,
+      materials: this.farm.materials,
+      collisionWorld: this.collisionWorld,
+      fighters: this.fighters
     });
 
     this.weapons = new WeaponSystem({
@@ -287,6 +297,7 @@ export class Game {
     this.updateBots(deltaSeconds);
     this.effects.update(deltaSeconds);
     this.planting.step(deltaSeconds);
+    this.balloon.step(deltaSeconds);
     this.input.endFrame();
   }
 

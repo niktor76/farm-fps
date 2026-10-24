@@ -437,6 +437,25 @@ export const SEED = {
   maximumLivePatches: 12
 };
 
+/**
+ * The hot air balloon. It runs on a timer rather than on controls, so the
+ * figures below are the whole of its behaviour. riseHeight over riseSeconds
+ * must stay well under WORLD.stepHeight per fixed step or the basket climbs
+ * out from under its rider; the constructor asserts it.
+ */
+export const BALLOON = {
+  basketExtent: 1.8,
+  floorThickness: 0.4,
+  basketHeight: 1.0,
+  envelopeRadius: 2.6,
+  clearanceExtent: 7,
+  riseHeight: 12,
+  riseSeconds: 8,
+  hoverSeconds: 20,
+  descendSeconds: 8,
+  readySeconds: 5
+};
+
 /** Selectable lighting conditions. Night stays playable rather than realistic. */
 export const DAY_CYCLES = {
   morning: {
