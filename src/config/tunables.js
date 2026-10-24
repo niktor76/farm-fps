@@ -559,16 +559,9 @@ export const DEFAULT_KEY_BINDINGS = {
   scoreboard: ['Tab']
 };
 
-export const WEAPON_SLOT_KEY_CODES = [
-  'Digit1',
-  'Digit2',
-  'Digit3',
-  'Digit4',
-  'Digit5',
-  'Digit6',
-  'Digit7',
-  'Digit8'
-];
+export const WEAPON_SLOT_KEY_CODES = WEAPON_ORDER.map(
+  (_, index) => `Digit${index + 1}`
+);
 
 /**
  * Aiming down the sights. Holding aim trades mobility for a tighter cone and a

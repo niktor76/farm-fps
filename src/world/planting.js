@@ -16,12 +16,14 @@
 
 import * as THREE from 'three';
 import { SEED, WORLD } from '../config/tunables.js';
-import { appendStalkPlacements, patchHitsGeometry, stalkCountForPatch, writeStalkBlock } from './props.js';
+import {
+  WHEAT_FENCE_MARGIN,
+  appendStalkPlacements,
+  patchHitsGeometry,
+  writeStalkBlock
+} from './props.js';
 
 const scratchGroundPoint = new THREE.Vector3();
-
-/** Keeps a planted patch clear of the fence by the same margin as the static field. */
-const FENCE_MARGIN = 2;
 
 export class PlantingSystem {
   /**
@@ -38,9 +40,7 @@ export class PlantingSystem {
     this.collisionWorld = collisionWorld;
     this.random = random;
 
-    this.stalksPerPatch = stalkCountForPatch(SEED.patchExtent, SEED.patchExtent);
     this.patches = [];
-    this.nextRecycleIndex = 0;
   }
 
   /**
@@ -61,7 +61,7 @@ export class PlantingSystem {
 
   /** True when a patch centred here would sit on clear, in-bounds ground. */
   canPlantAt(x, z) {
-    const limit = WORLD.playHalfExtent - SEED.patchExtent / 2 - FENCE_MARGIN;
+    const limit = WORLD.playHalfExtent - SEED.patchExtent / 2 - WHEAT_FENCE_MARGIN;
     if (Math.abs(x) > limit || Math.abs(z) > limit) return false;
 
     const candidate = {
@@ -106,7 +106,7 @@ export class PlantingSystem {
       this.random
     );
 
-    const patch = this.takePatchSlot();
+    const patch = this.takePatchSlot(placements.length);
     patch.centerX = centerX;
     patch.centerZ = centerZ;
     patch.placements = placements;
@@ -115,7 +115,6 @@ export class PlantingSystem {
 
     writeStalkBlock(this.wheat.mesh, placements, patch.firstIndex, 0);
     this.wheat.commitStalks();
-    return patch;
   }
 
   /**
@@ -123,16 +122,17 @@ export class PlantingSystem {
    * oldest patch once the cap is reached. Recycling in place is what keeps the
    * mesh from growing without bound over a long match.
    */
-  takePatchSlot() {
+  takePatchSlot(stalkCount) {
     if (this.patches.length < SEED.maximumLivePatches) {
-      const { firstIndex } = this.wheat.allocateStalks(this.stalksPerPatch);
+      const { firstIndex } = this.wheat.allocateStalks(stalkCount);
       const patch = { firstIndex };
       this.patches.push(patch);
       return patch;
     }
 
-    const patch = this.patches[this.nextRecycleIndex];
-    this.nextRecycleIndex = (this.nextRecycleIndex + 1) % SEED.maximumLivePatches;
+    // Oldest first: moving it to the back is the whole recycle order.
+    const patch = this.patches.shift();
+    this.patches.push(patch);
 
     if (patch.concealmentPatch) this.concealment.removePatch(patch.concealmentPatch);
     return patch;
@@ -145,17 +145,16 @@ export class PlantingSystem {
       patch.growSeconds = Math.min(SEED.growSeconds, patch.growSeconds + deltaSeconds);
       const growFraction = patch.growSeconds / SEED.growSeconds;
       writeStalkBlock(this.wheat.mesh, patch.placements, patch.firstIndex, growFraction);
+      this.wheat.markStalksDirty(patch.firstIndex, patch.placements.length);
 
-      if (patch.growSeconds >= SEED.growSeconds) {
-        patch.concealmentPatch = this.concealment.addPatch(
-          patch.centerX,
-          patch.centerZ,
-          SEED.patchExtent,
-          SEED.patchExtent
-        );
-      }
+      if (patch.growSeconds < SEED.growSeconds) continue;
 
-      this.wheat.commitStalks();
+      patch.concealmentPatch = this.concealment.addPatch(
+        patch.centerX,
+        patch.centerZ,
+        SEED.patchExtent,
+        SEED.patchExtent
+      );
     }
   }
 }

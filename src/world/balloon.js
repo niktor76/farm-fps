@@ -18,7 +18,11 @@
 
 import * as THREE from 'three';
 import { BALLOON, SIMULATION, WORLD } from '../config/tunables.js';
+import { mergeByMaterial } from './materials.js';
 import { patchHitsGeometry } from './props.js';
+
+const RISE_METRES_PER_SECOND = BALLOON.riseHeight / BALLOON.riseSeconds;
+const DESCEND_METRES_PER_SECOND = BALLOON.riseHeight / BALLOON.descendSeconds;
 
 /** Candidate pads, tried in order; the first one clear of geometry wins. */
 const CANDIDATE_SPOTS = [
@@ -42,7 +46,7 @@ export class Balloon {
   constructor({ scene, materials, collisionWorld, fighters }) {
     this.fighters = fighters;
 
-    const risePerStep = (BALLOON.riseHeight / BALLOON.riseSeconds) * SIMULATION.fixedStepSeconds;
+    const risePerStep = RISE_METRES_PER_SECOND * SIMULATION.fixedStepSeconds;
     if (risePerStep >= WORLD.stepHeight) {
       throw new Error('balloon climbs faster than a fighter can be stepped up');
     }
@@ -51,7 +55,6 @@ export class Balloon {
     this.centerX = centerX;
     this.centerZ = centerZ;
 
-    this.height = 0;
     this.phase = 'grounded';
     this.phaseSeconds = 0;
 
@@ -69,14 +72,18 @@ export class Balloon {
     );
   }
 
+  /** Single source of truth for how high the balloon is. */
+  get height() {
+    return this.group.position.y;
+  }
+
   /** True when this fighter is standing in the basket rather than beside it. */
   carries(fighter) {
-    const halfExtent = BALLOON.basketExtent / 2;
-    if (Math.abs(fighter.position.x - this.centerX) > halfExtent) return false;
-    if (Math.abs(fighter.position.z - this.centerZ) > halfExtent) return false;
+    const box = this.floorBox;
+    if (fighter.position.x < box.min.x || fighter.position.x > box.max.x) return false;
+    if (fighter.position.z < box.min.z || fighter.position.z > box.max.z) return false;
 
-    const floorTop = this.height + BALLOON.floorThickness;
-    return Math.abs(fighter.position.y - floorTop) < WORLD.stepHeight;
+    return Math.abs(fighter.position.y - box.max.y) < WORLD.stepHeight;
   }
 
   hasRider() {
@@ -96,7 +103,7 @@ export class Balloon {
     }
 
     if (this.phase === 'rising') {
-      const climbed = (BALLOON.riseHeight / BALLOON.riseSeconds) * deltaSeconds;
+      const climbed = RISE_METRES_PER_SECOND * deltaSeconds;
       this.setHeight(Math.min(BALLOON.riseHeight, this.height + climbed));
       if (this.height >= BALLOON.riseHeight) this.enter('hovering');
       return;
@@ -107,7 +114,7 @@ export class Balloon {
       return;
     }
 
-    const sank = (BALLOON.riseHeight / BALLOON.descendSeconds) * deltaSeconds;
+    const sank = DESCEND_METRES_PER_SECOND * deltaSeconds;
     this.setHeight(Math.max(0, this.height - sank));
     if (this.height <= 0) this.enter('grounded');
   }
@@ -117,9 +124,7 @@ export class Balloon {
     this.phaseSeconds = 0;
   }
 
-  /** Moves the model and the collision floor together; they must never diverge. */
   setHeight(height) {
-    this.height = height;
     this.group.position.y = height;
     this.floorBox.min.y = WORLD.groundLevel + height;
     this.floorBox.max.y = WORLD.groundLevel + height + BALLOON.floorThickness;
@@ -146,44 +151,44 @@ function findClearSpot(collisionWorld) {
 }
 
 function buildBalloonModel(materials) {
-  const group = new THREE.Group();
-
   // Not a clone of an existing material: every one of them carries a painted
   // map, and a tint multiplied by the dark corrugation map renders the
   // envelope black. Fabric gets its own untextured material instead.
-  const envelopeMaterial = new THREE.MeshStandardMaterial({
+  const fabric = new THREE.MeshStandardMaterial({
     color: 0xc8503c,
     roughness: 0.85,
     metalness: 0
   });
 
-  const envelope = new THREE.Mesh(
-    new THREE.SphereGeometry(BALLOON.envelopeRadius, 16, 12),
-    envelopeMaterial
-  );
-  envelope.scale.set(1, 1.25, 1);
-  envelope.position.y = BALLOON.basketHeight + BALLOON.envelopeRadius * 1.5;
-  envelope.castShadow = true;
-  group.add(envelope);
+  const wicker = materials.hay.clone();
+  wicker.color.setHex(0x9b7a44);
 
-  const skirt = new THREE.Mesh(
-    new THREE.ConeGeometry(BALLOON.envelopeRadius * 0.55, BALLOON.envelopeRadius * 0.9, 12, 1, true),
-    envelopeMaterial
-  );
-  skirt.position.y = BALLOON.basketHeight + BALLOON.envelopeRadius * 0.45;
-  skirt.rotation.x = Math.PI;
-  group.add(skirt);
+  const envelope = new THREE.SphereGeometry(BALLOON.envelopeRadius, 16, 12);
+  envelope.scale(1, 1.25, 1);
+  envelope.translate(0, BALLOON.basketHeight + BALLOON.envelopeRadius * 1.5, 0);
 
-  const basketMaterial = materials.hay.clone();
-  basketMaterial.color.setHex(0x9b7a44);
-
-  const floor = new THREE.Mesh(
-    new THREE.BoxGeometry(BALLOON.basketExtent, BALLOON.floorThickness, BALLOON.basketExtent),
-    basketMaterial
+  const skirt = new THREE.ConeGeometry(
+    BALLOON.envelopeRadius * 0.55,
+    BALLOON.envelopeRadius * 0.9,
+    12,
+    1,
+    true
   );
-  floor.position.y = BALLOON.floorThickness / 2;
-  floor.receiveShadow = true;
-  group.add(floor);
+  skirt.rotateX(Math.PI);
+  skirt.translate(0, BALLOON.basketHeight + BALLOON.envelopeRadius * 0.45, 0);
+
+  const floor = new THREE.BoxGeometry(
+    BALLOON.basketExtent,
+    BALLOON.floorThickness,
+    BALLOON.basketExtent
+  );
+  floor.translate(0, BALLOON.floorThickness / 2, 0);
+
+  const parts = [
+    { geometry: envelope, material: fabric },
+    { geometry: skirt, material: fabric },
+    { geometry: floor, material: wicker }
+  ];
 
   const wallThickness = 0.08;
   const wallOffset = BALLOON.basketExtent / 2 - wallThickness / 2;
@@ -195,16 +200,11 @@ function buildBalloonModel(materials) {
     [0, wallOffset, BALLOON.basketExtent, wallThickness],
     [0, -wallOffset, BALLOON.basketExtent, wallThickness]
   ]) {
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(sizeX, BALLOON.basketHeight, sizeZ),
-      basketMaterial
-    );
-    wall.position.set(offsetX, wallCentreY, offsetZ);
-    wall.castShadow = true;
-    group.add(wall);
+    const wall = new THREE.BoxGeometry(sizeX, BALLOON.basketHeight, sizeZ);
+    wall.translate(offsetX, wallCentreY, offsetZ);
+    parts.push({ geometry: wall, material: wicker });
   }
 
-  const ropeMaterial = materials.wood.clone();
   const ropeTop = BALLOON.basketHeight + BALLOON.envelopeRadius * 0.45;
 
   for (const [offsetX, offsetZ] of [
@@ -213,13 +213,11 @@ function buildBalloonModel(materials) {
     [wallOffset, -wallOffset],
     [-wallOffset, -wallOffset]
   ]) {
-    const rope = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.03, ropeTop - BALLOON.basketHeight, 5),
-      ropeMaterial
-    );
-    rope.position.set(offsetX, (BALLOON.basketHeight + ropeTop) / 2, offsetZ);
-    group.add(rope);
+    const rope = new THREE.CylinderGeometry(0.03, 0.03, ropeTop - BALLOON.basketHeight, 5);
+    rope.translate(offsetX, (BALLOON.basketHeight + ropeTop) / 2, offsetZ);
+    parts.push({ geometry: rope, material: materials.wood });
   }
 
-  return group;
+  // Three materials, so three draw calls instead of eleven meshes.
+  return mergeByMaterial(parts, true, true);
 }

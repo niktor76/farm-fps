@@ -6,7 +6,9 @@ const scratchDirection = new THREE.Vector3();
 const scratchPoint = new THREE.Vector3();
 
 /**
- * Static collision registry.
+ * Collision registry. Boxes are fixed once registered, with one exception:
+ * the balloon moves its basket floor vertically as it climbs, so anything
+ * added here that caches box bounds has to account for that.
  *
  * The world is a flat list of axis aligned boxes. Fighters are a circle of
  * FIGHTER.radius in the ground plane plus a vertical span, which makes every

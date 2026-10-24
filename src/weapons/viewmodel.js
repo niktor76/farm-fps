@@ -39,11 +39,9 @@ const VIEW_FAR_PLANE = 5;
 
 /**
  * The weapon sits a hand's length from the eye, so it catches less of the sun
- * than the world does. These scale the day cycle's own figures down to what
- * reads correctly at that distance.
+ * than the world does. The ambient fill needs no such correction.
  */
 const KEY_LIGHT_SCALE = 0.8;
-const FILL_LIGHT_SCALE = 1.0;
 
 const BOB_CYCLES_PER_METRE = 0.55;
 const BOB_LATERAL_METRES = 0.022;
@@ -256,7 +254,7 @@ export class ViewModel {
 
     this.fillLight.color.setHex(cycle.skyLightColor);
     this.fillLight.groundColor.setHex(cycle.groundLightColor);
-    this.fillLight.intensity = cycle.ambientIntensity * FILL_LIGHT_SCALE;
+    this.fillLight.intensity = cycle.ambientIntensity;
   }
 
   setWeapon(weaponId) {
@@ -557,7 +555,9 @@ function createViewMaterials(materials) {
   const sackcloth = materials.hay.clone();
   sackcloth.color.setHex(0xb49a6a);
 
-  const grain = materials.wheat.clone();
+  // hay, not wheat: wheat carries the wind shader, and a seed head in the hand
+  // does not sway. Cloning it would compile that program a second time.
+  const grain = materials.hay.clone();
 
   return { gunMetal, darkMetal, wood, rusted, sackcloth, grain };
 }
@@ -953,7 +953,7 @@ function buildSeedBag(materials) {
       0,
       0.126,
       -0.088,
-      -0.45 + QUARTER_TURN * 2,
+      Math.PI - 0.45,
       0,
       0
     )

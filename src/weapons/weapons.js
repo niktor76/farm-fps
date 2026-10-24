@@ -122,7 +122,6 @@ export class WeaponSystem {
     if (fighter.cooldownTimer > 0) return false;
 
     if (weapon.kind === 'melee') return this.fireMelee(fighter, weapon);
-    if (weapon.kind === 'tool') return this.useTool(fighter, weapon);
 
     if (fighter.reloading) {
       // A shell-by-shell reload is interruptible once there is something to fire.
@@ -138,6 +137,7 @@ export class WeaponSystem {
       return false;
     }
 
+    if (weapon.kind === 'tool') return this.useTool(fighter, weapon);
     return this.fireGun(fighter, weapon);
   }
 
@@ -197,14 +197,6 @@ export class WeaponSystem {
    * aiming at a wall or at the sky costs nothing but the cooldown.
    */
   useTool(fighter, weapon) {
-    if (fighter.reloading) return false;
-
-    if (fighter.currentMagazine === 0) {
-      this.playSound(fighter, 'empty', 1);
-      this.tryReload(fighter);
-      return false;
-    }
-
     fighter.getEyePosition(scratchOrigin);
     fighter.getAimDirection(scratchAim);
 
@@ -253,7 +245,7 @@ export class WeaponSystem {
 
   tryReload(fighter) {
     const weapon = fighter.currentWeapon;
-    if (weapon.kind === 'melee') return false;
+    if (weapon.magazineSize === undefined) return false;
     if (fighter.reloading) return false;
     if (fighter.currentMagazine >= weapon.magazineSize) return false;
 

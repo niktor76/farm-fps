@@ -41,7 +41,7 @@ const WHEAT_HEAD_RADIUS = 0.045;
 const WHEAT_STALK_SPACING = 0.35;
 const WHEAT_STALK_JITTER = 0.1;
 const WHEAT_STALK_LEAN = 0.16;
-const WHEAT_FENCE_MARGIN = 2;
+export const WHEAT_FENCE_MARGIN = 2;
 const WHEAT_CLEARANCE_RADIUS = 1;
 const WHEAT_CLEARANCE_SAMPLE_SPACING = 1.2;
 const WHEAT_PLACEMENT_ATTEMPTS = 400;
@@ -368,7 +368,8 @@ export function createCropRows(materials, random) {
  * @returns {{
  *   mesh: import('three').InstancedMesh,
  *   allocateStalks: (stalkCount: number) => { firstIndex: number, count: number },
- *   commitStalks: () => void
+ *   commitStalks: () => void,
+ *   markStalksDirty: (firstIndex: number, stalkCount: number) => void
  * }}
  */
 export function createWheatPatches(materials, collisionWorld, concealmentField, random) {
@@ -405,12 +406,14 @@ export function createWheatPatches(materials, collisionWorld, concealmentField, 
 
   applyWind(materials.wheat, CONCEALMENT.cropHeight, WIND.wheatAmplitude);
 
-  const stalksPerMaximumPatch =
-    Math.floor(CONCEALMENT.maximumPatchExtent / WHEAT_STALK_SPACING) ** 2;
+  const stalksPerMaximumPatch = stalkCountForPatch(
+    CONCEALMENT.maximumPatchExtent,
+    CONCEALMENT.maximumPatchExtent
+  );
   const capacity = stalks.length + WHEAT_SPARE_PATCH_COUNT * stalksPerMaximumPatch;
 
   const mesh = new THREE.InstancedMesh(createWheatStalkGeometry(), materials.wheat, capacity);
-  writePlacements(mesh, stalks);
+  writeStalkBlock(mesh, stalks, 0, 1);
   parkSpareInstances(mesh, stalks.length);
   mesh.count = stalks.length;
   mesh.instanceMatrix.needsUpdate = true;
@@ -434,7 +437,18 @@ export function createWheatPatches(materials, collisionWorld, concealmentField, 
     mesh.computeBoundingSphere();
   }
 
-  return { mesh, allocateStalks, commitStalks };
+  /**
+   * The per-frame path for a block that is only changing scale. It uploads
+   * that block alone instead of the whole instance buffer, and leaves the
+   * bounding sphere untouched: a growing patch stays inside the footprint it
+   * already had when commitStalks ran at planting time.
+   */
+  function markStalksDirty(firstIndex, stalkCount) {
+    mesh.instanceMatrix.addUpdateRange(firstIndex * 16, stalkCount * 16);
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  return { mesh, allocateStalks, commitStalks, markStalksDirty };
 }
 
 /**
@@ -469,26 +483,6 @@ export function appendStalkPlacements(target, centerX, centerZ, sizeX, sizeZ, ra
 /** How many stalks a patch of this footprint lays down. */
 export function stalkCountForPatch(sizeX, sizeZ) {
   return Math.floor(sizeX / WHEAT_STALK_SPACING) * Math.floor(sizeZ / WHEAT_STALK_SPACING);
-}
-
-/**
- * Writes one block of stalks scaled uniformly by `growFraction`, so a planted
- * patch rises out of the ground instead of appearing at full height. A
- * fraction of 1 is the mature patch.
- */
-export function writeStalkBlock(mesh, placements, firstIndex, growFraction) {
-  for (const [offset, placement] of placements.entries()) {
-    scratchPosition.set(placement.x, placement.y, placement.z);
-    scratchEuler.set(0, placement.rotationY, placement.rotationZ);
-    scratchQuaternion.setFromEuler(scratchEuler);
-    scratchScale.set(
-      placement.scaleX * growFraction,
-      placement.scaleY * growFraction,
-      placement.scaleZ * growFraction
-    );
-    scratchMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
-    mesh.setMatrixAt(firstIndex + offset, scratchMatrix);
-  }
 }
 
 /**
@@ -810,7 +804,7 @@ function addRotatedCollisionBox(collisionWorld, centerX, baseY, centerZ, sizeX, 
 function buildInstancedMesh(geometry, material, placements, castShadow, receiveShadow) {
   const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
 
-  writePlacements(mesh, placements);
+  writeStalkBlock(mesh, placements, 0, 1);
 
   mesh.instanceMatrix.needsUpdate = true;
   mesh.computeBoundingSphere();
@@ -819,13 +813,25 @@ function buildInstancedMesh(geometry, material, placements, castShadow, receiveS
   return mesh;
 }
 
-function writePlacements(mesh, placements) {
-  for (const [index, placement] of placements.entries()) {
+/**
+ * Writes a block of stalks, scaled uniformly by `growFraction` so a planted
+ * patch can rise out of the ground. A fraction of 1 is the mature patch.
+ *
+ * Indexed rather than iterated: this runs every frame while a patch grows, and
+ * `entries()` would allocate a pair array per stalk inside the fixed step.
+ */
+export function writeStalkBlock(mesh, placements, firstIndex, growFraction) {
+  for (let offset = 0; offset < placements.length; offset += 1) {
+    const placement = placements[offset];
     scratchPosition.set(placement.x, placement.y, placement.z);
     scratchEuler.set(0, placement.rotationY, placement.rotationZ);
     scratchQuaternion.setFromEuler(scratchEuler);
-    scratchScale.set(placement.scaleX, placement.scaleY, placement.scaleZ);
+    scratchScale.set(
+      placement.scaleX * growFraction,
+      placement.scaleY * growFraction,
+      placement.scaleZ * growFraction
+    );
     scratchMatrix.compose(scratchPosition, scratchQuaternion, scratchScale);
-    mesh.setMatrixAt(index, scratchMatrix);
+    mesh.setMatrixAt(firstIndex + offset, scratchMatrix);
   }
 }

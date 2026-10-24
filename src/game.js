@@ -331,9 +331,8 @@ export class Game {
 
     if (this.weapons.tryFire(this.player, this.input.isDown('fire'))) {
       const weapon = this.player.currentWeapon;
-      if (weapon.kind === 'melee') this.viewModel.playMelee(weapon.swingSeconds);
-      else if (weapon.kind === 'tool') this.viewModel.playMelee(weapon.cooldownSeconds);
-      else this.viewModel.playFire();
+      if (weapon.kind === 'gun') this.viewModel.playFire();
+      else this.viewModel.playMelee(weapon.cooldownSeconds);
     }
   }
 
