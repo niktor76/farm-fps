@@ -18,7 +18,7 @@
  */
 
 import * as THREE from 'three';
-import { OPTICS } from '../config/tunables.js';
+import { DAY_CYCLES, OPTICS } from '../config/tunables.js';
 import { mergeByMaterial } from '../world/materials.js';
 
 const TWO_PI = Math.PI * 2;
@@ -37,11 +37,13 @@ const VIEW_FIELD_OF_VIEW = 70;
 const VIEW_NEAR_PLANE = 0.01;
 const VIEW_FAR_PLANE = 5;
 
-const KEY_LIGHT_COLOR = 0xfff2d8;
-const KEY_LIGHT_INTENSITY = 2.4;
-const FILL_SKY_COLOR = 0xc6d8ec;
-const FILL_GROUND_COLOR = 0x40433f;
-const FILL_INTENSITY = 1.1;
+/**
+ * The weapon sits a hand's length from the eye, so it catches less of the sun
+ * than the world does. These scale the day cycle's own figures down to what
+ * reads correctly at that distance.
+ */
+const KEY_LIGHT_SCALE = 0.8;
+const FILL_LIGHT_SCALE = 1.0;
 
 const BOB_CYCLES_PER_METRE = 0.55;
 const BOB_LATERAL_METRES = 0.022;
@@ -151,8 +153,9 @@ export class ViewModel {
   /**
    * @param {import('three').PerspectiveCamera} camera
    * @param {ReturnType<import('../world/materials.js').createMaterialLibrary>} materials
+   * @param {keyof typeof DAY_CYCLES} dayCycleKey
    */
-  constructor(camera, materials) {
+  constructor(camera, materials, dayCycleKey) {
     this.camera = camera;
 
     this.scene = new THREE.Scene();
@@ -165,12 +168,14 @@ export class ViewModel {
     this.scene.add(this.viewCamera);
     this.viewSpread = Math.tan(VIEW_FIELD_OF_VIEW * DEGREES_TO_HALF_RADIANS);
 
-    const keyLight = new THREE.DirectionalLight(KEY_LIGHT_COLOR, KEY_LIGHT_INTENSITY);
-    keyLight.position.set(-0.6, 1, 0.8);
-    this.scene.add(keyLight);
-    this.scene.add(
-      new THREE.HemisphereLight(FILL_SKY_COLOR, FILL_GROUND_COLOR, FILL_INTENSITY)
-    );
+    this.keyLight = new THREE.DirectionalLight();
+    this.keyLight.position.set(-0.6, 1, 0.8);
+    this.scene.add(this.keyLight);
+
+    this.fillLight = new THREE.HemisphereLight();
+    this.scene.add(this.fillLight);
+
+    this.setDayCycle(dayCycleKey);
 
     this.group = new THREE.Group();
     this.group.matrixAutoUpdate = true;
@@ -230,6 +235,22 @@ export class ViewModel {
     this.meleeDuration = 1;
 
     this.setWeapon('pistol');
+  }
+
+  /**
+   * Relights the weapon scene for the selected cycle, so the gun in your hands
+   * matches the sky it is held under instead of staying permanently daylit.
+   */
+  setDayCycle(dayCycleKey) {
+    const cycle = DAY_CYCLES[dayCycleKey];
+    if (!cycle) throw new Error(`unknown day cycle: ${dayCycleKey}`);
+
+    this.keyLight.color.setHex(cycle.sunColor);
+    this.keyLight.intensity = cycle.sunIntensity * KEY_LIGHT_SCALE;
+
+    this.fillLight.color.setHex(cycle.skyLightColor);
+    this.fillLight.groundColor.setHex(cycle.groundLightColor);
+    this.fillLight.intensity = cycle.ambientIntensity * FILL_LIGHT_SCALE;
   }
 
   setWeapon(weaponId) {

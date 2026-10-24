@@ -71,7 +71,7 @@ export class Game {
     this.scoreboard = new Scoreboard(uiRoot);
     this.scoreboardVisible = false;
     this.effects = new EffectSystem(this.scene, this.farm.materials);
-    this.viewModel = new ViewModel(this.camera, this.farm.materials);
+    this.viewModel = new ViewModel(this.camera, this.farm.materials, settings.dayCycleKey);
 
     this.player = new Player({
       id: 0,
