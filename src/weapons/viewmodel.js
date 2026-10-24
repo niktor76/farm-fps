@@ -902,8 +902,9 @@ function buildSniper(materials) {
 
 /**
  * A burlap seed sack, cinched at the neck and tipped forward so its mouth
- * faces where the player is looking. The grain cone at the opening is what the
- * muzzle anchor sits on, so the planting puff appears to come out of the sack.
+ * faces where the player is looking. It carries a muzzle anchor like every
+ * other weapon because the constructor requires one, but nothing reads it:
+ * planting spawns no effect.
  */
 function buildSeedBag(materials) {
   return [

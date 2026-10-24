@@ -46,13 +46,17 @@ export class PlantingSystem {
   /**
    * Where a seed thrown from this eye along this aim would land: the point the
    * player is looking at on the ground. Returns false when they are looking at
-   * or above the horizon, or past the weapon's range.
+   * or above the horizon, past the weapon's range, or through geometry — the
+   * last one stops a patch being seeded inside a building from outside it.
    */
   resolveTarget(eyePosition, aimDirection, target) {
     if (aimDirection.y >= 0) return false;
 
     const distanceToGround = (eyePosition.y - WORLD.groundLevel) / -aimDirection.y;
     if (distanceToGround > SEED.plantRange) return false;
+    if (this.collisionWorld.raycast(eyePosition, aimDirection, distanceToGround) < distanceToGround) {
+      return false;
+    }
 
     target.copy(eyePosition).addScaledVector(aimDirection, distanceToGround);
     target.y = WORLD.groundLevel;
@@ -72,6 +76,10 @@ export class PlantingSystem {
     };
 
     if (patchHitsGeometry(this.collisionWorld, candidate)) return false;
+
+    // Standing crop already conceals here, so a charge spent would buy nothing
+    // and would stack a second rectangle on the same ground.
+    if (this.concealment.contains(x, z)) return false;
 
     const clearance = SEED.patchExtent / 2 + SEED.minimumGapFromPatch;
     for (const patch of this.patches) {

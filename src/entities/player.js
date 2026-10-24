@@ -89,7 +89,13 @@ export class Player extends Fighter {
    * Look slows with the zoom, so the same mouse travel moves the crosshair the
    * same distance across the screen at any magnification. Screen offset runs
    * through the tangent of the half-angle, so the multiplier is the ratio of
-   * those tangents; at full scope it reduces to exactly 1 / magnification.
+   * those tangents.
+   *
+   * Both ends are measured against this player's own base field of view, which
+   * is what keeps that invariant true once the base became a setting. It also
+   * means the full-scope multiplier is only 1 / magnification at the default
+   * base of 75 degrees: a wider base sees a larger jump down to the scope's
+   * fixed angle, and is slowed further to match.
    */
   get lookSensitivityMultiplier() {
     return (

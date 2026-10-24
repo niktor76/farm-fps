@@ -559,6 +559,10 @@ export const DEFAULT_KEY_BINDINGS = {
   scoreboard: ['Tab']
 };
 
+// Digit1..Digit9 are the only number-row KeyboardEvent.code values, so a
+// tenth weapon needs a different selection scheme rather than a tenth key.
+if (WEAPON_ORDER.length > 9) throw new Error('more weapons than number-row keys');
+
 export const WEAPON_SLOT_KEY_CODES = WEAPON_ORDER.map(
   (_, index) => `Digit${index + 1}`
 );

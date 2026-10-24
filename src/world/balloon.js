@@ -17,7 +17,7 @@
  */
 
 import * as THREE from 'three';
-import { BALLOON, SIMULATION, WORLD } from '../config/tunables.js';
+import { BALLOON, FIGHTER, SIMULATION, WORLD } from '../config/tunables.js';
 import { mergeByMaterial } from './materials.js';
 import { patchHitsGeometry } from './props.js';
 
@@ -77,11 +77,21 @@ export class Balloon {
     return this.group.position.y;
   }
 
-  /** True when this fighter is standing in the basket rather than beside it. */
+  /**
+   * True when this fighter is standing in the basket rather than beside it.
+   *
+   * Widened by the fighter radius to match groundHeightAt, which supports
+   * anyone whose circle overlaps the floor. Without it someone stood on the
+   * overhang is held up by the basket but not counted as a rider, and a lone
+   * player there waits for a launch that never comes.
+   */
   carries(fighter) {
     const box = this.floorBox;
-    if (fighter.position.x < box.min.x || fighter.position.x > box.max.x) return false;
-    if (fighter.position.z < box.min.z || fighter.position.z > box.max.z) return false;
+    const radius = FIGHTER.radius;
+    if (fighter.position.x < box.min.x - radius) return false;
+    if (fighter.position.x > box.max.x + radius) return false;
+    if (fighter.position.z < box.min.z - radius) return false;
+    if (fighter.position.z > box.max.z + radius) return false;
 
     return Math.abs(fighter.position.y - box.max.y) < WORLD.stepHeight;
   }
