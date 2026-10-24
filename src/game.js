@@ -45,7 +45,7 @@ export class Game {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
-      CAMERA.fieldOfView,
+      settings.fieldOfView,
       1,
       CAMERA.nearPlane,
       CAMERA.farPlane
@@ -80,7 +80,8 @@ export class Game {
       color: 0xd8d2c4,
       feelKey: settings.feelKey,
       camera: this.camera,
-      input: this.input
+      input: this.input,
+      fieldOfView: settings.fieldOfView
     });
 
     this.player.sensitivity = settings.sensitivity;

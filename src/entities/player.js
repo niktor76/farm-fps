@@ -35,14 +35,16 @@ export class Player extends Fighter {
    * @param {{
    *   id: number, name: string, color: number, feelKey: string,
    *   camera: import('three').PerspectiveCamera,
-   *   input: import('../input.js').Input
+   *   input: import('../input.js').Input,
+   *   fieldOfView: number
    * }} options
    */
-  constructor({ id, name, color, feelKey, camera, input }) {
+  constructor({ id, name, color, feelKey, camera, input, fieldOfView }) {
     super({ id, name, color, isBot: false, feelKey });
 
     this.camera = camera;
     this.input = input;
+    this.baseFieldOfView = fieldOfView;
     this.sensitivity = CAMERA.defaultSensitivity;
     this.keyboardYawRadiansPerSecond = THREE.MathUtils.degToRad(INPUT.keyboardLook.yawDegreesPerSecond);
     this.keyboardPitchRadiansPerSecond = THREE.MathUtils.degToRad(
@@ -72,10 +74,12 @@ export class Player extends Fighter {
   /** Field of view the camera is showing right now, hip to fully scoped. */
   get currentFieldOfView() {
     const optic = this.currentOptic;
-    if (optic === null) return CAMERA.fieldOfView;
+    if (optic === null) return this.baseFieldOfView;
 
+    // Only the hip end follows the player's setting. The scoped end is a fixed
+    // real angle, so a wider field of view cannot widen what a 6x sight shows.
     return THREE.MathUtils.lerp(
-      CAMERA.fieldOfView,
+      this.baseFieldOfView,
       scopedFieldOfView(optic.magnification),
       this.aimFraction
     );
@@ -90,7 +94,7 @@ export class Player extends Fighter {
   get lookSensitivityMultiplier() {
     return (
       Math.tan((this.currentFieldOfView * Math.PI) / 360) /
-      Math.tan((CAMERA.fieldOfView * Math.PI) / 360)
+      Math.tan((this.baseFieldOfView * Math.PI) / 360)
     );
   }
 

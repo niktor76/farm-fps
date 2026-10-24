@@ -41,6 +41,8 @@ export const MATCH = {
 
 export const CAMERA = {
   fieldOfView: 75,
+  minimumFieldOfView: 70,
+  maximumFieldOfView: 105,
   nearPlane: 0.05,
   farPlane: 400,
   maximumPitch: (89 * Math.PI) / 180,

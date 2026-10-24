@@ -1,6 +1,7 @@
 import {
   MATCH,
   INPUT,
+  CAMERA,
   DIFFICULTIES,
   FEEL_PRESETS,
   DEFAULT_FEEL,
@@ -256,6 +257,20 @@ export class Menu {
         formatValue: (value) => `${Math.round(value)}°/s`,
         onChange: (value) => {
           this.settings.keyboardTurnDegreesPerSecond = value;
+        }
+      }).element
+    );
+
+    section.appendChild(
+      this.buildRangeRow({
+        label: 'Field of view',
+        minimum: CAMERA.minimumFieldOfView,
+        maximum: CAMERA.maximumFieldOfView,
+        step: 1,
+        value: this.settings.fieldOfView,
+        formatValue: (value) => `${Math.round(value)}°`,
+        onChange: (value) => {
+          this.settings.fieldOfView = value;
         }
       }).element
     );
@@ -658,6 +673,12 @@ function loadSettings() {
       INPUT.keyboardLook.minimumYawDegreesPerSecond,
       INPUT.keyboardLook.maximumYawDegreesPerSecond
     ),
+    fieldOfView: storedNumber(
+      parsed.fieldOfView,
+      CAMERA.fieldOfView,
+      CAMERA.minimumFieldOfView,
+      CAMERA.maximumFieldOfView
+    ),
     volume: storedNumber(parsed.volume, AUDIO.defaultVolume, 0, 1),
     showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : true,
     dayCycleKey: DAY_CYCLES[parsed.dayCycleKey] ? parsed.dayCycleKey : DEFAULT_DAY_CYCLE,
@@ -693,6 +714,7 @@ function loadKeyBindings(stored) {
  *   deviceMode: 'mouse'|'trackpad',
  *   sensitivity: number,
  *   keyboardTurnDegreesPerSecond: number,
+ *   fieldOfView: number,
  *   volume: number,
  *   showNametags: boolean,
  *   dayCycleKey: 'morning'|'noon'|'evening'|'night',
