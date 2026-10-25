@@ -1,6 +1,6 @@
 {
   "name": "farm-fps",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
   "description": "Browser based free-for-all first person shooter set on a farm, built with Three.js.",

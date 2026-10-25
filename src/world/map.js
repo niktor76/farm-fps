@@ -23,7 +23,7 @@ import { WORLD, FIGHTER } from '../config/tunables.js';
 import { createMaterialLibrary, createTexturedBox, scaleUvs, mergeByMaterial } from './materials.js';
 import { createLighting } from './lighting.js';
 import { ConcealmentField } from './concealment.js';
-import { createGroundOcclusionTexture, applyGroundOcclusion } from './ambientOcclusion.js';
+import { createGroundOcclusionTexture, createGroundOcclusionLayer } from './ambientOcclusion.js';
 import { createBarn, createGarage, createFarmhouse, createShed } from './buildings.js';
 import {
   createFence,
@@ -58,10 +58,8 @@ export function buildFarm({ scene, collisionWorld, random, dayCycleKey, environm
   const group = new THREE.Group();
   group.name = 'farm';
 
-  const ground = createGround(materials);
-  const yard = createYardSurfaces(materials);
-  group.add(ground);
-  group.add(yard);
+  group.add(createGround(materials));
+  group.add(createYardSurfaces(materials));
 
   collisionWorld.addPlayBoundary();
 
@@ -85,11 +83,7 @@ export function buildFarm({ scene, collisionWorld, random, dayCycleKey, environm
   group.add(createOuterScenery(materials, random));
 
   // After every structure, so the painted footprints cover the whole farm.
-  const occlusion = createGroundOcclusionTexture(collisionWorld);
-  applyGroundOcclusion(ground, occlusion);
-  yard.traverse((object) => {
-    if (object.isMesh) applyGroundOcclusion(object, occlusion);
-  });
+  group.add(createGroundOcclusionLayer(createGroundOcclusionTexture(collisionWorld)));
 
   scene.add(group);
 

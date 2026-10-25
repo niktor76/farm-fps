@@ -6,21 +6,21 @@
  * that absence is what makes a building read as resting on the grass rather
  * than floating above it.
  *
- * The occlusion is painted once into a texture rather than computed per frame,
- * because none of it moves: the buildings, fences and bales are placed at
- * startup and stay. It reaches the material through `aoMap`, which three
- * applies to indirect light only -- never to direct sun. That used to make it
- * nearly pointless here, since the only indirect light was a weak fill; now
- * that the sky is a real light source there is something substantial to
- * occlude.
+ * None of it moves, so none of it is computed per frame: the occluders are
+ * placed at startup and their footprints are painted once into a texture.
  *
- * A second UV set is required and the ground does not have one: its `uv` is
- * scaled far past 0..1 so the grass tiles. `uv1` is added here as a plain
- * world-space projection across the covered square.
+ * It is drawn as a multiplying layer over the ground rather than through
+ * `aoMap`, and that choice is the whole reason this is visible. `aoMap`
+ * attenuates indirect light only, never direct sun -- which sounds right until
+ * you measure it on this farm, where at the default hour the sun runs at 2.55
+ * against an ambient of 0.33. Occluding the indirect share completely moved
+ * 1.4% of the frame by a mean of 5 of 255: correct by the book, and invisible.
+ * A real contact shadow darkens sunlit ground too, because the gap beside a
+ * wall receives less of everything.
  */
 
 import * as THREE from 'three';
-import { GROUND_AMBIENT_OCCLUSION } from '../config/tunables.js';
+import { GROUND_AMBIENT_OCCLUSION, WORLD } from '../config/tunables.js';
 
 /** World XZ to texture space, where 0..1 spans the covered square centred on the origin. */
 function toTextureSpace(value, size, extent) {
@@ -74,9 +74,11 @@ export function createGroundOcclusionTexture(collisionWorld) {
   canvas.height = size;
   const context = canvas.getContext('2d');
 
-  // White is unoccluded: aoMap reads the red channel and 1 leaves light alone.
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, size, size);
+  // Fully transparent is unoccluded. The footprints are painted as black with
+  // a varying alpha, so ordinary blending darkens exactly where they are and
+  // leaves everything else untouched -- no need for a blend mode whose
+  // interaction with the rest of the pipeline has to be reasoned about.
+  context.clearRect(0, 0, size, size);
 
   for (const box of collisionWorld.boxes) {
     if (box.min.x > extent || box.max.x < -extent) continue;
@@ -85,38 +87,35 @@ export function createGroundOcclusionTexture(collisionWorld) {
   }
 
   const texture = new THREE.CanvasTexture(canvas);
-  // Channel 1 is `uv1`. The default is 0, which here is the grass tiling set --
-  // scaled far past 0..1, so the map would clamp to its white edge everywhere
-  // and occlude precisely nothing.
-  texture.channel = 1;
-  texture.colorSpace = THREE.NoColorSpace;
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
   return texture;
 }
 
 /**
- * Projects the covered square onto the mesh as `uv1`, the channel `aoMap`
- * samples. The existing `uv` is left alone: it is tiled far past 0..1 to repeat
- * the grass, which is exactly what an occlusion map must not do.
+ * A plane just above the ground carrying the occlusion as soft black. Being
+ * drawn over the scene rather than fed to the lighting is what lets it darken
+ * direct sunlight as well as sky light; the alternative, `aoMap`, cannot.
+ *
+ * It writes no depth and sits a few centimetres up, clearing the yard patches
+ * that are themselves raised off the ground, so neither fights the other.
  */
-export function applyGroundOcclusion(mesh, texture) {
-  const geometry = mesh.geometry;
-  const position = geometry.attributes.position;
+export function createGroundOcclusionLayer(texture) {
   const extent = GROUND_AMBIENT_OCCLUSION.coveredHalfExtent;
-  const uv1 = new Float32Array(position.count * 2);
+  const geometry = new THREE.PlaneGeometry(extent * 2, extent * 2);
+  geometry.rotateX(-Math.PI / 2);
 
-  for (let index = 0; index < position.count; index += 1) {
-    uv1[index * 2] = (position.getX(index) + extent) / (extent * 2);
-    uv1[index * 2 + 1] = 1 - (position.getZ(index) + extent) / (extent * 2);
-  }
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false
+  });
 
-  geometry.setAttribute('uv1', new THREE.BufferAttribute(uv1, 2));
-
-  // Cloned so the ground's occlusion does not leak onto anything else sharing
-  // the grass or dirt material.
-  const material = mesh.material.clone();
-  material.aoMap = texture;
-  material.aoMapIntensity = GROUND_AMBIENT_OCCLUSION.intensity;
-  mesh.material = material;
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.y = WORLD.groundLevel + GROUND_AMBIENT_OCCLUSION.layerHeight;
+  mesh.renderOrder = GROUND_AMBIENT_OCCLUSION.renderOrder;
+  mesh.name = 'ground-occlusion';
+  return mesh;
 }

@@ -526,8 +526,9 @@ export const DEFAULT_DAY_CYCLE = 'evening';
  * camera for the darkening to read. The texture is small because the signal is
  * a soft blur -- resolution buys nothing a gradient does not already give.
  *
- * aoMap touches indirect light only, so intensity trades against how much of
- * the scene's light comes from the sky rather than the sun.
+ * The layer sits above the yard patches, which are themselves raised off the
+ * ground, and draws after the opaque scene so it multiplies over what is
+ * already there rather than being overdrawn by it.
  */
 export const GROUND_AMBIENT_OCCLUSION = {
   textureSize: 1024,
@@ -536,8 +537,9 @@ export const GROUND_AMBIENT_OCCLUSION = {
   maximumSpreadMetres: 4,
   spreadPerMetre: 0.55,
   strengthPerMetre: 0.3,
-  maximumStrength: 0.85,
-  intensity: 1
+  maximumStrength: 0.55,
+  layerHeight: 0.05,
+  renderOrder: 1
 };
 
 /**
