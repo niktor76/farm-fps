@@ -163,7 +163,7 @@ export class WeaponSystem {
     shot.shooter = fighter;
     shot.weapon = weapon;
 
-    const spread = Math.max(weapon.baseSpread, fighter.effectiveSpread);
+    const spread = fighter.effectiveSpread;
 
     for (let pellet = 0; pellet < weapon.pelletCount; pellet += 1) {
       spreadDirection(scratchAim, spread, this.random, scratchDirection);

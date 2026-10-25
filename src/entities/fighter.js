@@ -123,12 +123,11 @@ export class Fighter {
   }
 
   get effectiveSpread() {
-    if (this.currentWeapon.kind !== 'gun') return 0;
+    const weapon = this.currentWeapon;
+    if (weapon.kind !== 'gun') return 0;
 
-    return (
-      (this.currentSpread + this.movementSpread) *
-      THREE.MathUtils.lerp(1, this.currentOptic.spreadMultiplier, this.aimFraction)
-    );
+    const hip = Math.max(weapon.baseSpread, this.currentSpread) + this.movementSpread;
+    return hip * THREE.MathUtils.lerp(1, this.currentOptic.spreadMultiplier, this.aimFraction);
   }
 
   getEyePosition(target) {

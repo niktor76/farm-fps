@@ -5,6 +5,13 @@ one human player against AI bots, on a fenced 80x80 m farm, three-minute
 matches. Every geometry, texture and sound is generated in code; there are no
 downloaded or paid assets.
 
+## Where things are planned
+
+- [`IDEAS.md`](IDEAS.md) — the full backlog, one entry per idea with a size
+  estimate and what the current code already provides.
+- [`ROADMAP.md`](ROADMAP.md) — the proposed order, and the open decisions that
+  block each phase.
+
 ## Requirements and running it
 
 Node `^20.19.0 || >=22.12.0` (from `node_modules/vite/package.json`'s

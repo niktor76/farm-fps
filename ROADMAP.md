@@ -32,7 +32,7 @@ Nothing new. Three open items cleared so later work starts from a clean base.
 
 | Item | What |
 |---|---|
-| IDEA-9 | The sniper scope does not improve accuracy. `weapons.js:166` floors spread at `baseSpread`, which cancels every optic's `spreadMultiplier`. Affects all five weapons; the sniper is where it is visible. |
+| IDEA-9 | **Done 2026-10-25.** The spread floor was moved to the correct side of the optic rather than removed, because it is load-bearing on respawn. Sniper hit rate at 60 m went from 1 of 120 to 120 of 120; all five optics now reduce spread as designed. |
 | — | The revolver view model renders near-black in daylight. Confirmed pre-existing, probably the `darkMetal` material in the view scene rather than the revolver, so it likely affects several guns. |
 | REQ-6 | Read the real frame rate with ten bots. Backtick opens the debug overlay. Only the owner can do this; headless rendering is software-only. |
 
@@ -282,7 +282,7 @@ These block the phase named, and nothing else:
 
 | Question | Blocks | What it is |
 |---|---|---|
-| QST-2 | PH-1 | Does removing the spread floor break the measured weapon balance, and what is the right `baseSpread` for a sniper whose scope works? |
+| ~~QST-2~~ | PH-1 | **Answered.** No — the sniper was designed as a one-shot body kill in every feel preset, and the other weapons were already at the floor hip-firing. |
 | QST-1 | PH-2 | How fast should a day cycle run relative to a three-minute match? |
 | QST-5 | PH-3 | Is there frame-rate headroom for weather? Answered by REQ-6 in PH-1. |
 | QST-3 | PH-6 | What is being defended, and do attackers come from fixed directions? |

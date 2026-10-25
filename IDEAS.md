@@ -226,7 +226,7 @@ cheap to settle: make `groundHeightAt` return a slope and see what visibly break
 
 ## 3. Combat
 
-### IDEA-9 — The sniper scope does nothing for accuracy · BUG · size S
+### IDEA-9 — The sniper scope does nothing for accuracy · BUG · **[fixed 2026-10-25]**
 
 **This is not an idea, it is a confirmed defect**, and it is the reason Ben's
 observation was right. It is written up here because that is where the observation
@@ -268,11 +268,39 @@ into a fourteen-metre-wide circle at fifty metres.
 cancelled by the same floor. The sniper is simply the one where the gap is large
 enough to notice.
 
-**Caveat on the fix.** Removing the floor is a one-line change, but it is not
-obviously the whole answer: the floor may also be what stops spread going to zero
-in cases nobody wants, and the sniper's 0.14 base was presumably chosen *knowing*
-the scope existed. The fix needs a measured time-to-kill pass afterwards, the way
-the weapons were balanced originally.
+**How it was fixed, 2026-10-25.** The caution was justified: the floor *is*
+load-bearing. `currentSpread` is reset to 0 on respawn (`fighter.js:202`) and
+`updateRecoil` only restores it to `baseSpread` on the next step, so a shot fired in
+that window would have been perfectly accurate without a floor.
+
+So the floor was not removed, it was **moved to the correct side of the optic** —
+applied to the accumulated spread before the multiplier rather than to the result
+after it. The fire site now simply reads `fighter.effectiveSpread`.
+
+**Measured afterwards**, aimed at a frozen bot, perfect aim, 120 shots per volley:
+
+| Weapon | Hip cone | Scoped cone | Reduction |
+|---|---|---|---|
+| Pistol | 0.0035 rad | 0.00105 rad | 3.3x |
+| Revolver | 0.0046 rad | 0.00138 rad | 3.3x |
+| Rifle | 0.005 rad | 0.0015 rad | 3.3x |
+| Shotgun | 0.1047 rad | 0.0785 rad | 1.3x |
+| Sniper | 0.14 rad | 0.0028 rad | 50x |
+
+Sniper hit rate at 60 metres went from **1 of 120** to **120 of 120**.
+
+**On the balance question (QST-2), the answer turned out to be reassuring.** Sniper
+damage is 100 in two feel presets and 120 in the third, against 100 health
+(`tunables.js:63`, `:82`, `:101`) — a one-shot body kill was the intent all along in
+every preset, and the broken scope is why it never landed. The fix delivers the
+designed balance rather than changing it. Time-to-kill for the other four weapons is
+unchanged, because their spread was already at the floor when hip-firing.
+
+**Bots are unaffected.** `wantsAim` is set only from player input
+(`player.js:144`); a bot's intent keeps the default `false` (`fighter.js:499`), so a
+bot's `aimFraction` is always 0. Bots also only ever carry pistol, rifle, shotgun,
+karambit and pitchfork (`bot.js:123`) — never the sniper or the revolver. Difficulty
+did not move.
 
 ### IDEA-10 — Grenades · size M
 
@@ -780,9 +808,11 @@ binary, and exactly the "weather the player can act on" test from section 7.5.
 ## 8. Open questions
 
 - **QST-1** How fast should a day cycle run relative to a match? (IDEA-1)
-- **QST-2** Does removing the spread floor break the weapon balance that was
-  measured originally, and what is the right `baseSpread` for a sniper whose scope
-  actually works? (IDEA-9)
+- ~~**QST-2** Does removing the spread floor break the weapon balance?~~
+  **Answered 2026-10-25:** no. The sniper's 100 damage against 100 health was a
+  one-shot body kill by design in every feel preset; the other four weapons were
+  already at the spread floor when hip-firing, so their time-to-kill is unchanged.
+  (IDEA-9)
 - **QST-3** What is being defended in Farm Defence, and do attackers come from fixed
   directions? (IDEA-12)
 - **QST-4** At what point does the farming direction leave this repository? (section 5)
