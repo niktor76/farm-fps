@@ -465,12 +465,12 @@ export const DAY_CYCLES = {
     fogNear: 70,
     fogFar: 190,
     sunColor: 0xffe9cc,
-    sunIntensity: 2.4,
+    sunIntensity: 2.05,
     sunElevationDegrees: 24,
     sunAzimuthDegrees: 110,
     skyLightColor: 0xcfe2f2,
     groundLightColor: 0x5c4a28,
-    ambientIntensity: 1.2
+    ambientIntensity: 0.36
   },
   noon: {
     label: 'Midday',
@@ -479,12 +479,12 @@ export const DAY_CYCLES = {
     fogNear: 85,
     fogFar: 220,
     sunColor: 0xfffaf0,
-    sunIntensity: 3.2,
+    sunIntensity: 2.7,
     sunElevationDegrees: 68,
     sunAzimuthDegrees: 40,
     skyLightColor: 0xbfd9ef,
     groundLightColor: 0x53411f,
-    ambientIntensity: 1.15
+    ambientIntensity: 0.35
   },
   evening: {
     label: 'Golden hour',
@@ -493,12 +493,12 @@ export const DAY_CYCLES = {
     fogNear: 62,
     fogFar: 178,
     sunColor: 0xfff2d8,
-    sunIntensity: 3,
+    sunIntensity: 2.55,
     sunElevationDegrees: 18,
     sunAzimuthDegrees: 300,
     skyLightColor: 0xbfd9ef,
     groundLightColor: 0x53411f,
-    ambientIntensity: 1.1
+    ambientIntensity: 0.33
   },
   night: {
     label: 'Night',
@@ -507,12 +507,12 @@ export const DAY_CYCLES = {
     fogNear: 35,
     fogFar: 120,
     sunColor: 0xaec4e8,
-    sunIntensity: 0.85,
+    sunIntensity: 0.72,
     sunElevationDegrees: 42,
     sunAzimuthDegrees: 215,
     skyLightColor: 0x3d4f6b,
     groundLightColor: 0x171c22,
-    ambientIntensity: 0.9
+    ambientIntensity: 0.27
   }
 };
 
@@ -523,21 +523,21 @@ export const DEFAULT_DAY_CYCLE = 'evening';
  * so resolution buys nothing once PMREM has blurred it, and the prefiltering
  * cost scales with it.
  *
- * The two intensities are calibrated, not arbitrary, and they differ by a lot.
- * The world's sun and ambient were tuned before any environment existed, so an
- * environment at full strength is extra light on top: measured at midday it
- * raised the ground 20.8%. 0.15 is what keeps that under 5%, which is the
- * budget for leaving the tuned look alone -- the cost is that world metals gain
- * little, and lifting them would mean re-tuning every cycle's sun and ambient.
+ * The sky is now the world's ambient source, which is what the hemisphere
+ * light was standing in for, so each cycle's ambientIntensity was cut to about
+ * a third and the sun trimmed 15% to pay for the light the environment adds.
+ * The hemisphere light stays rather than being deleted: it is the only per-cycle
+ * handle on ambient colour, and at this strength it still tints the shadows.
+ *
  * The view model is a separate scene with its own camera and its own light
- * scale, and nothing in it casts on the world, so it can carry a far stronger
- * environment. That is what lifts the near-black gun metal.
+ * scale, and nothing in it casts on the world, so it carries a stronger
+ * environment than the world does. That is what lifts the near-black gun metal.
  */
 export const ENVIRONMENT = {
   sourceWidth: 128,
   sourceHeight: 64,
   horizonSoftness: 0.08,
-  worldIntensity: 0.15,
+  worldIntensity: 1,
   viewIntensity: 3
 };
 
