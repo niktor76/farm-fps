@@ -520,6 +520,108 @@ out whether the direction is fun before committing to it.
 
 ---
 
+### IDEA-23 — Realistic shading: sky lighting and ambient occlusion · size M–L
+
+**What.** Three related things that make the render read as lit by a real sky
+rather than by lamps:
+
+- **Image-based lighting (IBL)** — the sky becomes an actual light source via an
+  environment map, so surfaces pick up its colour and metals have something to
+  reflect.
+- **Ambient occlusion** — the soft darkening in corners and where an object meets
+  the ground, because the sky is blocked from reaching there. Real-time versions
+  are screen-space: **SSAO**, or the newer and better **GTAO**.
+- **Soft shadows** — a blurry penumbra as a large source would cast, rather than
+  the hard sun edge.
+
+**Why it matters beyond looks.** IBL is not optional polish here, it is a missing
+light path. Verified 2026-10-25: the project has no environment map anywhere, and
+`materials.metal` is `metalness: 0.78`. Under the physically-based model a metal
+is mostly specular, so with nothing to reflect it renders near-black no matter how
+bright the lamps are — measured at 2.5% effective diffuse reflectance, and five
+times the light recovered only 2.19x. That is the root of IDEA-24.
+
+**Code reality**, checked against the installed `three@0.186.1`:
+
+- `Scene.environment`, `Scene.environmentIntensity` and `Scene.environmentRotation`
+  all exist (`scenes/Scene.js:50`, `:95`, `:104`).
+- `PMREMGenerator.fromScene(scene, sigma, near, far, options)` exists, which is the
+  entry point for a *procedural* sky — no downloaded HDRI needed, so CON-1 holds.
+  The `ColorEnvironment` addon demonstrates the pattern.
+- `GTAOPass.js`, `SSAOPass.js` and `SAOPass.js` ship in the postprocessing addons.
+
+**The split, and why.** IBL is size S–M and lands immediately. Ambient occlusion is
+a separate, larger job: it needs a post-processing pipeline (`EffectComposer`) the
+project does not have, and it carries real frame-cost on top of REQ-6 being
+unmeasured. Decision taken 2026-10-25: **IBL now, ambient occlusion later.**
+
+**Known risk for IBL.** A PMREM has to be regenerated whenever the sky changes, and
+a continuous day cycle (IDEA-1) changes it constantly. Regenerating every frame
+would be far too expensive. The likely answer is a low regeneration rate — a sky
+that updates in steps of a second or two is imperceptible — but the cost must be
+measured, not assumed.
+
+**Soft shadows note.** `gotchas.md` records that `PCFSoftShadowMap` still exports in
+r186 but silently falls back. `VSMShadowMap` is available and does produce genuinely
+soft shadows; that is the one to try.
+
+### IDEA-24 — Metal weapons render near-black · BUG · **[diagnosed 2026-10-25]**
+
+Root cause fully established, see the diagnosis in this session. In short:
+`createViewMaterials` (`viewmodel.js:548`) clones the textured `materials.metal` and
+tints it `0x32373c`; `MeshStandardMaterial` multiplies colour by map, so the albedo
+lands near 0.11, and `metalness: 0.78` with **no environment map** removes the
+metal's main light path entirely.
+
+Measured, gun isolated against a frozen scene: baseline 17.9/255. All lights x5 only
+reached 2.19x, which rules out lighting. Removing the dark tint gave 3.37x; adding
+an environment **with the tints untouched** gave 3.36x.
+
+Affects every gun carrying `darkMetal`, worst first: sniper 17 parts, revolver 8,
+rifle 6, pistol 2, karambit 2. The sniper is worse than the revolver and was simply
+less noticed, because it is normally viewed through its scope overlay.
+
+**Fix chosen 2026-10-25:** the environment map (IDEA-23), not a lighter tint —
+it restores the missing light path rather than repainting around the symptom, and
+it keeps the designed colours exactly.
+
+## 5b. Cross-cutting
+
+Not a game mode and not a feature of one — a capability every mode could use.
+
+### IDEA-22 — Multiplayer · size XL · **not yet researched**
+
+**What.** Real players against each other instead of, or alongside, bots. A player
+creates a room, invites others with a link or a QR code, and can put a password on
+the room.
+
+**Why it is listed as its own thing.** It is not a mode, it is a **module**. Any mode
+that has more than one participant can use it: deathmatch obviously, Farm Defence
+cooperatively, and even the farming mode as a shared farm. That makes it the only
+item in this document that multiplies the value of everything else rather than
+adding beside it — and it is also why it must not be built *into* one mode.
+
+**What is wanted, as stated:**
+
+- A player creates a room.
+- Others join through a plain link, or by scanning a QR code.
+- A room can be protected with a password.
+- No account, no install — the link is the whole invitation.
+
+**Status: deliberately unresearched.** This entry is a capture, not a plan. The
+owner's instruction is to research it properly when it becomes current — what the
+current best practice actually is for browser multiplayer, authority and state
+sync, hosting, and room/invite handling — rather than designing it from
+assumptions now. Nothing above should be read as a chosen approach.
+
+**What makes it XL, in general terms.** Every mode today runs entirely in one
+browser tab with one authority. Multiplayer introduces a second machine that must
+be kept consistent with the first, and that question reaches into movement,
+shooting, and every piece of state a mode owns. It also adds something the project
+has never had: a server with a lifetime longer than a page load.
+
+**Open questions are deferred with the research**, not guessed at here.
+
 ## 6. Constraints
 
 These are not ideas, they are the rules the ideas have to respect. They come from
@@ -553,6 +655,12 @@ its output should flow into something the shooter cares about.
 **CON-6 — Weather that changes no decision is atmosphere, and should be labelled
 as such.** From section 7.5. Each weather idea above has to name the decision it
 changes, or be built as decoration deliberately rather than by accident.
+
+**CON-8 — Every item gets a research pass before it is designed** (owner
+instruction, 2026-10-25). The termite and game-feel research in section 7 is the
+pattern: find out what the current best practice actually is, and build from that
+rather than from assumptions. This applies to every entry, not only the ones that
+obviously touch the real world.
 
 **CON-7 — The sizes in this document are gut estimates and are not padded.** The
 standard correction is two to three times, once bugs, audio, interface and

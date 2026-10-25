@@ -33,7 +33,7 @@ Nothing new. Three open items cleared so later work starts from a clean base.
 | Item | What |
 |---|---|
 | IDEA-9 | **Done 2026-10-25.** The spread floor was moved to the correct side of the optic rather than removed, because it is load-bearing on respawn. Sniper hit rate at 60 m went from 1 of 120 to 120 of 120; all five optics now reduce spread as designed. |
-| — | The revolver view model renders near-black in daylight. Confirmed pre-existing, probably the `darkMetal` material in the view scene rather than the revolver, so it likely affects several guns. |
+| IDEA-24 | **Diagnosed 2026-10-25, fix moved to PH-2.** Metal weapons render near-black because `darkMetal` is a tinted clone of a textured material *and* the project has no environment map, so a `metalness: 0.78` surface has nothing to reflect. Lighting was ruled out by measurement. The fix is the environment map, so it ships with PH-2. Affects the sniper worse than the revolver. |
 | REQ-6 | Read the real frame rate with ten bots. Backtick opens the debug overlay. Only the owner can do this; headless rendering is software-only. |
 
 **Why first.** The scope bug means a weapon the game advertises does not do what it
@@ -49,10 +49,15 @@ correctly in daylight. A real frame-rate number exists.
 
 ---
 
-## PH-2 — A sky that moves · size S–M
+## PH-2 — A sky that lights, and a sky that moves · size M
 
-**Ships:** IDEA-1 (continuous day cycle) and IDEA-3 (fog as a condition rather than
-a constant), built together.
+**Ships:** IDEA-23 (image-based lighting, which also fixes IDEA-24), IDEA-1
+(continuous day cycle) and IDEA-3 (fog as a condition rather than a constant).
+
+**Order inside the phase matters: IBL first.** The environment map is what gives
+metals a light path at all, and it is also a thing the day cycle has to drive — so
+building the cycle first would mean building its lighting hand-off twice. Decided
+2026-10-25 together with the choice of IBL over repainting the dark tint.
 
 **Why together.** Both are "drive the lighting values over time", so the machinery
 is written once. All four lighting presets already exist complete in
@@ -265,6 +270,37 @@ The proposed first slice, in order:
 repository) and QST-6 (what is the shared resource).
 
 ---
+
+## Cross-cutting track — not a phase
+
+### Multiplayer (IDEA-22) · size XL · **unresearched by instruction**
+
+Real players instead of or alongside bots: a player opens a room, invites others
+with a link or a QR code, and can password-protect it.
+
+**It is a module, not a mode**, and that is why it sits outside the phase list. Any
+mode with more than one participant can use it — deathmatch directly, Farm Defence
+cooperatively, the farming mode as a shared farm. It therefore multiplies the value
+of the other phases rather than adding beside them, and it must not be built into
+any single one of them.
+
+**Deliberately not designed yet.** The owner's instruction (2026-10-25) is to
+research current best practice properly when it becomes current, rather than
+committing to an approach now. Nothing is assumed here about transport, authority,
+hosting or room handling.
+
+**Where it would fit.** It wants the mode framework from PH-6 to exist first, since
+that is what defines what a "match" is that two machines must agree on. Before that
+point it would be built against a hard-coded free-for-all and rewritten afterwards.
+It is otherwise independent of PH-2 to PH-5 and could run in parallel with them.
+
+### Ambient occlusion and soft shadows (rest of IDEA-23) · size M–L
+
+Deferred from PH-2 by decision on 2026-10-25: **IBL now, ambient occlusion later.**
+It needs an `EffectComposer` post-processing pipeline the project does not have, and
+it adds frame cost while REQ-6 is still unmeasured. Revisit once PH-1 produces a
+real frame-rate number. `GTAOPass` is the candidate; for shadows, `VSMShadowMap`,
+since `gotchas.md` records that `PCFSoftShadowMap` silently falls back in r186.
 
 ## Not scheduled
 
