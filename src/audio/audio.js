@@ -158,6 +158,11 @@ export class AudioEngine {
     if (this.context.state !== 'running') this.context.resume();
   }
 
+  /** Silences a paused or hidden match. `play` already drops anything scheduled while suspended. */
+  suspend() {
+    if (this.context.state === 'running') this.context.suspend();
+  }
+
   /** @param {number} volume 0..1 */
   setVolume(volume) {
     this.masterGain.gain.setTargetAtTime(volume, this.context.currentTime, 0.02);

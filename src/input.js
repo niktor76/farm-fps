@@ -39,8 +39,9 @@ export class Input {
    * @param {HTMLCanvasElement} canvas
    * @param {Record<string, string[]>} [bindings] action to key codes
    */
-  constructor(canvas, bindings = DEFAULT_KEY_BINDINGS) {
+  constructor(canvas, bindings = DEFAULT_KEY_BINDINGS, onLockLost = () => {}) {
     this.canvas = canvas;
+    this.onLockLost = onLockLost;
 
     this.deviceMode = INPUT.defaultDeviceMode;
     this.deviceProfile = INPUT.devices[this.deviceMode];
@@ -111,6 +112,7 @@ export class Input {
       if (this.locked) return;
       this.downActions.clear();
       this.clearLookState();
+      this.onLockLost();
     };
 
     this.listeners = [

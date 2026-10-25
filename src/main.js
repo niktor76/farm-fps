@@ -1,6 +1,7 @@
 import './style.css';
 import { Menu } from './ui/menu.js';
 import { Results } from './ui/results.js';
+import { Pause } from './ui/pause.js';
 import { Game } from './game.js';
 import { AudioEngine } from './audio/audio.js';
 
@@ -29,7 +30,24 @@ const results = new Results(uiRoot, {
   }
 });
 
+const pause = new Pause(uiRoot, {
+  onResume: () => {
+    pause.hide();
+    game.resume();
+  },
+  onRestart: () => {
+    pause.hide();
+    startMatch(lastSettings);
+  },
+  onMainMenu: () => {
+    pause.hide();
+    game.stop();
+    menu.show();
+  }
+});
+
 function startMatch(settings) {
+  pause.hide();
   if (game) game.dispose();
 
   lastSettings = settings;
@@ -44,7 +62,8 @@ function startMatch(settings) {
     onMatchEnd: (fighters) => {
       const localFighterId = game.player.id;
       results.show(fighters, localFighterId);
-    }
+    },
+    onPause: () => pause.show()
   });
 
   game.start();

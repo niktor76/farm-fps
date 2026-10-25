@@ -31,7 +31,7 @@ import { CAMERA, MATCH, DAY_CYCLE_MOTION } from './config/tunables.js';
  * M3 scope: the player and the bots fight. The results flow arrives in M4.
  */
 export class Game {
-  constructor({ canvas, uiRoot, settings, audio, onMatchEnd }) {
+  constructor({ canvas, uiRoot, settings, audio, onMatchEnd, onPause = () => {} }) {
     this.settings = settings;
     this.difficultyKey = settings.difficultyKey;
     this.audio = audio;
@@ -77,7 +77,9 @@ export class Game {
     this.spawnPoints = generateSpawnPoints(this.collisionWorld, this.random);
     this.waypoints = WaypointGraph.build(this.collisionWorld, this.random, this.farm.coverPoints);
 
-    this.input = new Input(canvas, settings.keyBindings);
+    this.paused = false;
+    this.onPause = onPause;
+    this.input = new Input(canvas, settings.keyBindings, () => this.pause());
     this.input.setDeviceMode(settings.deviceMode);
     this.hud = new Hud(uiRoot);
     this.scoreboard = new Scoreboard(uiRoot);
@@ -173,6 +175,10 @@ export class Game {
 
     this.canvas = canvas;
     this.handleResize = () => this.resize();
+    this.handleVisibilityChange = () => {
+      if (document.hidden) this.pause();
+    };
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
     this.handleCanvasClick = () => {
       this.audio.resume();
       this.input.requestLock();
@@ -209,6 +215,35 @@ export class Game {
     this.input.setEnabled(true);
     this.hud.show();
     this.loop.start();
+  }
+
+  /**
+   * Freezes everything, the match clock included: this is a solo match against
+   * bots, so there is no fairness argument for letting the round burn down
+   * while a menu is open. GameLoop.start resets its own timestamp, so resuming
+   * cannot produce the huge first frame that would teleport every bot.
+   */
+  pause() {
+    if (this.paused || this.finished || !this.loop.running) return;
+
+    this.paused = true;
+    this.loop.stop();
+    this.input.setEnabled(false);
+    this.audio.suspend();
+    // The crosshair sits dead centre, which is straight through the panel.
+    this.hud.hide();
+    this.onPause();
+  }
+
+  resume() {
+    if (!this.paused) return;
+
+    this.paused = false;
+    this.audio.resume();
+    this.hud.show();
+    this.input.setEnabled(true);
+    this.loop.start();
+    this.input.requestLock();
   }
 
   stop() {
@@ -438,6 +473,7 @@ export class Game {
     this.viewModel.dispose();
     this.canvas.removeEventListener('click', this.handleCanvasClick);
     window.removeEventListener('resize', this.handleResize);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     disposeSceneResources(this.scene);
     // scene.environment is not in the graph, so the walk above never sees it.
     if (this.movingEnvironment !== null) this.movingEnvironment.dispose();
