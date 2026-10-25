@@ -13,8 +13,13 @@ import {
   DEFAULT_KEY_BINDINGS,
   WEAPON_SLOT_KEY_CODES
 } from '../config/tunables.js';
+import { MOVING_CYCLE_KEY } from '../world/dayCycle.js';
 
 const STORAGE_KEY = 'farm-fps-settings';
+
+function isValidDayCycle(dayCycleKey) {
+  return Boolean(DAY_CYCLES[dayCycleKey]) || dayCycleKey === MOVING_CYCLE_KEY;
+}
 
 const FEEL_DESCRIPTIONS = {
   arcade: 'Faster movement, longer time to kill.',
@@ -199,11 +204,11 @@ export class Menu {
     const group = document.createElement('div');
     group.className = 'menu-segmented-group menu-segmented-group--wrapped';
 
-    for (const dayCycleKey of Object.keys(DAY_CYCLES)) {
+    for (const dayCycleKey of [...Object.keys(DAY_CYCLES), MOVING_CYCLE_KEY]) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'menu-segmented-button';
-      button.textContent = DAY_CYCLES[dayCycleKey].label;
+      button.textContent = DAY_CYCLES[dayCycleKey]?.label ?? 'Moving';
       button.dataset.key = dayCycleKey;
       button.classList.toggle('is-selected', dayCycleKey === this.settings.dayCycleKey);
 
@@ -681,7 +686,7 @@ function loadSettings() {
     ),
     volume: storedNumber(parsed.volume, AUDIO.defaultVolume, 0, 1),
     showNametags: typeof parsed.showNametags === 'boolean' ? parsed.showNametags : true,
-    dayCycleKey: DAY_CYCLES[parsed.dayCycleKey] ? parsed.dayCycleKey : DEFAULT_DAY_CYCLE,
+    dayCycleKey: isValidDayCycle(parsed.dayCycleKey) ? parsed.dayCycleKey : DEFAULT_DAY_CYCLE,
     keyBindings: loadKeyBindings(parsed.keyBindings)
   };
 }
@@ -717,7 +722,7 @@ function loadKeyBindings(stored) {
  *   fieldOfView: number,
  *   volume: number,
  *   showNametags: boolean,
- *   dayCycleKey: 'morning'|'noon'|'evening'|'night',
+ *   dayCycleKey: 'morning'|'noon'|'evening'|'night'|'moving',
  *   keyBindings: Record<string, string[]>
  * }} MatchSettings
  */

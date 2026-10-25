@@ -18,9 +18,10 @@
  */
 
 import * as THREE from 'three';
-import { DAY_CYCLES, OPTICS, ENVIRONMENT } from '../config/tunables.js';
+import { OPTICS, ENVIRONMENT } from '../config/tunables.js';
 import { mergeByMaterial } from '../world/materials.js';
 import { applyEnvironment } from '../world/environment.js';
+import { resolveFixedCycle } from '../world/dayCycle.js';
 
 const TWO_PI = Math.PI * 2;
 const DEGREES_TO_HALF_RADIANS = Math.PI / 360;
@@ -248,18 +249,27 @@ export class ViewModel {
    * matches the sky it is held under instead of staying permanently daylit.
    */
   setDayCycle(dayCycleKey) {
-    const cycle = DAY_CYCLES[dayCycleKey];
-    if (!cycle) throw new Error(`unknown day cycle: ${dayCycleKey}`);
+    this.applyCycle(
+      resolveFixedCycle(dayCycleKey),
+      this.environments === null ? null : this.environments.get(dayCycleKey)
+    );
+  }
 
-    this.keyLight.color.setHex(cycle.sunColor);
+  /**
+   * The weapon is lit by the same hour as the world around it, so a blended
+   * cycle reaches it the same way a fixed one does. The environment arrives
+   * separately because the moving cycle rebuilds it on its own schedule.
+   */
+  applyCycle(cycle, environment) {
+    this.keyLight.color.copy(cycle.sunColor);
     this.keyLight.intensity = cycle.sunIntensity * KEY_LIGHT_SCALE;
 
-    this.fillLight.color.setHex(cycle.skyLightColor);
-    this.fillLight.groundColor.setHex(cycle.groundLightColor);
+    this.fillLight.color.copy(cycle.skyLightColor);
+    this.fillLight.groundColor.copy(cycle.groundLightColor);
     this.fillLight.intensity = cycle.ambientIntensity;
 
-    if (this.environments !== null) {
-      applyEnvironment(this.scene, this.environments.get(dayCycleKey), ENVIRONMENT.viewIntensity);
+    if (environment !== null) {
+      applyEnvironment(this.scene, environment, ENVIRONMENT.viewIntensity);
     }
   }
 

@@ -35,7 +35,7 @@ Everything here makes the world change while you are in it. Per unit of work thi
 is the highest-value group in the document, because the data these features need
 mostly exists already.
 
-### IDEA-1 — Continuous day cycle · size S
+### IDEA-1 — Continuous day cycle · **[done 2026-10-25]**
 
 **What.** Instead of picking one lighting condition in the menu and keeping it for
 the whole match, the sun moves: morning → midday → golden hour → night → morning.
@@ -87,7 +87,7 @@ The visibility part is free: fog already exists and is already per-cycle (see
 IDEA-3). Wet surfaces are the expensive part — doing it properly means touching
 material roughness across the material library, which is why this is M and not S.
 
-### IDEA-3 — Weather: fog as a condition, not a constant · size S
+### IDEA-3 — Weather: fog as a condition, not a constant · **[done 2026-10-25]**
 
 **What.** Fog that rolls in and out during a match, rather than being a fixed
 property of the time of day.
@@ -520,7 +520,7 @@ out whether the direction is fun before committing to it.
 
 ---
 
-### IDEA-23 — Realistic shading: sky lighting and ambient occlusion · size M–L
+### IDEA-23 — Realistic shading: sky lighting and ambient occlusion · **[IBL done 2026-10-25, AO open]**
 
 **What.** Three related things that make the render read as lit by a real sky
 rather than by lamps:
@@ -565,7 +565,7 @@ measured, not assumed.
 r186 but silently falls back. `VSMShadowMap` is available and does produce genuinely
 soft shadows; that is the one to try.
 
-### IDEA-24 — Metal weapons render near-black · BUG · **[diagnosed 2026-10-25]**
+### IDEA-24 — Metal weapons render near-black · BUG · **[fixed 2026-10-25]**
 
 Root cause fully established, see the diagnosis in this session. In short:
 `createViewMaterials` (`viewmodel.js:548`) clones the textured `materials.metal` and
@@ -915,7 +915,11 @@ binary, and exactly the "weather the player can act on" test from section 7.5.
 
 ## 8. Open questions
 
-- **QST-1** How fast should a day cycle run relative to a match? (IDEA-1)
+- ~~**QST-1** How fast should a day cycle run relative to a match?~~
+  **Answered 2026-10-25:** one full day per match (`fullDaySeconds: 180`), offered as a
+  fifth *Moving* option beside the four fixed hours rather than replacing them, so
+  REQ-11 still holds. A slower cycle was rejected because most matches would then
+  never show night, which is the most distinctive light the farm has.
 - ~~**QST-2** Does removing the spread floor break the weapon balance?~~
   **Answered 2026-10-25:** no. The sniper's 100 damage against 100 health was a
   one-shot body kill by design in every feel preset; the other four weapons were

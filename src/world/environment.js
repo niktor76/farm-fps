@@ -14,6 +14,11 @@
 
 import * as THREE from 'three';
 import { DAY_CYCLES, ENVIRONMENT } from '../config/tunables.js';
+import { resolveFixedCycle } from './dayCycle.js';
+
+const scratchSky = new THREE.Color();
+const scratchGround = new THREE.Color();
+const scratchHorizon = new THREE.Color();
 
 /**
  * Equirectangular, so it maps straight onto the sphere of directions: x is the
@@ -23,9 +28,9 @@ import { DAY_CYCLES, ENVIRONMENT } from '../config/tunables.js';
  */
 function drawSkyGradient(context, width, height, cycle) {
   const gradient = context.createLinearGradient(0, 0, 0, height);
-  const sky = new THREE.Color(cycle.skyLightColor);
-  const ground = new THREE.Color(cycle.groundLightColor);
-  const horizon = sky.clone().lerp(ground, 0.5);
+  const sky = scratchSky.copy(cycle.skyLightColor);
+  const ground = scratchGround.copy(cycle.groundLightColor);
+  const horizon = scratchHorizon.copy(sky).lerp(ground, 0.5);
 
   gradient.addColorStop(0, `#${sky.getHexString()}`);
   gradient.addColorStop(0.5 - ENVIRONMENT.horizonSoftness, `#${sky.getHexString()}`);
@@ -62,13 +67,16 @@ export function createSkyEnvironments(renderer) {
 
   const prefiltered = new Map();
 
-  for (const [key, cycle] of Object.entries(DAY_CYCLES)) {
+  function build(cycle) {
     const source = createSkyTexture(cycle);
-    prefiltered.set(key, generator.fromEquirectangular(source).texture);
+    const texture = generator.fromEquirectangular(source).texture;
     source.dispose();
+    return texture;
   }
 
-  generator.dispose();
+  for (const key of Object.keys(DAY_CYCLES)) {
+    prefiltered.set(key, build(resolveFixedCycle(key)));
+  }
 
   return {
     get(dayCycleKey) {
@@ -76,9 +84,18 @@ export function createSkyEnvironments(renderer) {
       if (!texture) throw new Error(`unknown day cycle: ${dayCycleKey}`);
       return texture;
     },
+
+    /**
+     * A one-off for a blended hour. The caller owns the result and must
+     * dispose it, which is why the moving cycle swaps before it disposes --
+     * releasing a texture the renderer still holds flashes the scene.
+     */
+    build,
+
     dispose() {
       for (const texture of prefiltered.values()) texture.dispose();
       prefiltered.clear();
+      generator.dispose();
     }
   };
 }

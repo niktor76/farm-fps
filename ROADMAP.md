@@ -49,7 +49,7 @@ correctly in daylight. A real frame-rate number exists.
 
 ---
 
-## PH-2 — A sky that lights, and a sky that moves · size M
+## PH-2 — A sky that lights, and a sky that moves · **DONE 2026-10-25**
 
 **Ships:** IDEA-23 (image-based lighting, which also fixes IDEA-24), IDEA-1
 (continuous day cycle) and IDEA-3 (fog as a condition rather than a constant).
@@ -319,8 +319,8 @@ These block the phase named, and nothing else:
 | Question | Blocks | What it is |
 |---|---|---|
 | ~~QST-2~~ | PH-1 | **Answered.** No — the sniper was designed as a one-shot body kill in every feel preset, and the other weapons were already at the floor hip-firing. |
-| QST-1 | PH-2 | How fast should a day cycle run relative to a three-minute match? |
-| QST-5 | PH-3 | Is there frame-rate headroom for weather? Answered by REQ-6 in PH-1. |
+| ~~QST-1~~ | PH-2 | **Answered.** One full day per match, as a fifth *Moving* option beside the four fixed hours. |
+| QST-5 | PH-3 | Is there frame-rate headroom for weather? Still open: headless renders in software at a few frames a second, so only a real machine can answer it. |
 | QST-3 | PH-6 | What is being defended, and do attackers come from fixed directions? |
 | QST-7 | PH-6 | Is night the wave gate? |
 | QST-4 | PH-8 | At what point does the farming direction leave this repository? |

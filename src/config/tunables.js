@@ -519,6 +519,24 @@ export const DAY_CYCLES = {
 export const DEFAULT_DAY_CYCLE = 'evening';
 
 /**
+ * The moving day cycle, and the fog that rolls underneath it.
+ *
+ * fullDaySeconds is one match long on purpose: a cycle slower than a match
+ * would mean most players never see night, and night is the most distinctive
+ * light this farm has. The two fog periods are deliberately not multiples of
+ * each other, so the thick spells do not line up into a rhythm, and neither
+ * divides the match length.
+ */
+export const DAY_CYCLE_MOTION = {
+  fullDaySeconds: 180,
+  fogSlowPeriodSeconds: 47,
+  fogFastPeriodSeconds: 17,
+  fogThickest: 0.45,
+  fogClearest: 1.15,
+  environmentRebuildSeconds: 1
+};
+
+/**
  * Image-based lighting. The source is tiny on purpose: it is a smooth gradient,
  * so resolution buys nothing once PMREM has blurred it, and the prefiltering
  * cost scales with it.

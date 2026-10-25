@@ -11,8 +11,9 @@
  */
 
 import * as THREE from 'three';
-import { WORLD, DAY_CYCLES, DEFAULT_DAY_CYCLE, ENVIRONMENT } from '../config/tunables.js';
+import { WORLD, DEFAULT_DAY_CYCLE, ENVIRONMENT } from '../config/tunables.js';
 import { applyEnvironment } from './environment.js';
+import { resolveFixedCycle } from './dayCycle.js';
 
 const SHADOW_NEAR = 10;
 const SHADOW_FAR = 170;
@@ -40,23 +41,39 @@ function sunPosition(elevationDegrees, azimuthDegrees) {
   );
 }
 
-export function createLighting(scene, dayCycleKey = DEFAULT_DAY_CYCLE, environments = null) {
-  const cycle = DAY_CYCLES[dayCycleKey];
-  if (!cycle) throw new Error(`unknown day cycle: ${dayCycleKey}`);
+/**
+ * Pushes a resolved cycle into the live objects. Separate from createLighting
+ * because the moving cycle calls it every frame with a blend of two hours,
+ * where the fixed cycles call it once.
+ */
+export function applyCycle(lighting, scene, cycle) {
+  scene.background.copy(cycle.skyColor);
+  scene.fog.color.copy(cycle.fogColor);
+  scene.fog.near = cycle.fogNear;
+  scene.fog.far = cycle.fogFar;
 
-  scene.background = new THREE.Color(cycle.skyColor);
-  scene.fog = new THREE.Fog(cycle.fogColor, cycle.fogNear, cycle.fogFar);
+  lighting.hemisphere.color.copy(cycle.skyLightColor);
+  lighting.hemisphere.groundColor.copy(cycle.groundLightColor);
+  lighting.hemisphere.intensity = cycle.ambientIntensity;
 
-  const hemisphere = new THREE.HemisphereLight(
-    cycle.skyLightColor,
-    cycle.groundLightColor,
-    cycle.ambientIntensity
+  lighting.sun.color.copy(cycle.sunColor);
+  lighting.sun.intensity = cycle.sunIntensity;
+  lighting.sun.position.copy(
+    sunPosition(cycle.sunElevationDegrees, cycle.sunAzimuthDegrees)
   );
+}
+
+export function createLighting(scene, dayCycleKey = DEFAULT_DAY_CYCLE, environments = null) {
+  const cycle = resolveFixedCycle(dayCycleKey);
+
+  scene.background = new THREE.Color();
+  scene.fog = new THREE.Fog(0x000000, 1, 2);
+
+  const hemisphere = new THREE.HemisphereLight();
   hemisphere.position.set(0, 60, 0);
   scene.add(hemisphere);
 
-  const sun = new THREE.DirectionalLight(cycle.sunColor, cycle.sunIntensity);
-  sun.position.copy(sunPosition(cycle.sunElevationDegrees, cycle.sunAzimuthDegrees));
+  const sun = new THREE.DirectionalLight();
   sun.castShadow = true;
 
   // The projected width of an 80 m square under a 22 degree azimuth is about
@@ -77,9 +94,12 @@ export function createLighting(scene, dayCycleKey = DEFAULT_DAY_CYCLE, environme
   scene.add(sun);
   scene.add(sun.target);
 
+  const lighting = { sun, hemisphere };
+  applyCycle(lighting, scene, cycle);
+
   if (environments !== null) {
     applyEnvironment(scene, environments.get(dayCycleKey), ENVIRONMENT.worldIntensity);
   }
 
-  return { sun, hemisphere };
+  return lighting;
 }

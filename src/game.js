@@ -5,6 +5,8 @@ import { Random } from './core/rng.js';
 import { CollisionWorld } from './world/collision.js';
 import { buildFarm, updateWind } from './world/map.js';
 import { createSkyEnvironments } from './world/environment.js';
+import { DayCycleClock, isMovingCycle } from './world/dayCycle.js';
+import { applyCycle } from './world/lighting.js';
 import { generateSpawnPoints, chooseSpawnPoint } from './world/spawns.js';
 import { Player } from './entities/player.js';
 import { Bot } from './entities/bot.js';
@@ -20,7 +22,7 @@ import { EffectSystem } from './weapons/effects.js';
 import { ViewModel } from './weapons/viewmodel.js';
 import { PlantingSystem } from './world/planting.js';
 import { Balloon } from './world/balloon.js';
-import { CAMERA, MATCH } from './config/tunables.js';
+import { CAMERA, MATCH, DAY_CYCLE_MOTION } from './config/tunables.js';
 
 /**
  * One match: owns the scene, the fighters, the fixed-timestep loop, the match
@@ -60,11 +62,16 @@ export class Game {
     this.random = new Random();
     this.collisionWorld = new CollisionWorld();
     this.environments = createSkyEnvironments(this.renderer);
+    this.dayClock = isMovingCycle(settings.dayCycleKey)
+      ? new DayCycleClock(this.random.next())
+      : null;
+    this.movingEnvironment = null;
+    this.secondsSinceEnvironmentRebuild = 0;
     this.farm = buildFarm({
       scene: this.scene,
       collisionWorld: this.collisionWorld,
       random: this.random,
-      dayCycleKey: settings.dayCycleKey,
+      dayCycleKey: this.dayClock === null ? settings.dayCycleKey : this.dayClock.nearestKey,
       environments: this.environments
     });
     this.spawnPoints = generateSpawnPoints(this.collisionWorld, this.random);
@@ -79,7 +86,7 @@ export class Game {
     this.viewModel = new ViewModel(
       this.camera,
       this.farm.materials,
-      settings.dayCycleKey,
+      this.dayClock === null ? settings.dayCycleKey : this.dayClock.nearestKey,
       this.environments
     );
 
@@ -344,9 +351,37 @@ export class Game {
     }
   }
 
+  /**
+   * The sky itself is cheap to move, but its prefiltered reflection is not, so
+   * the lights and fog follow the clock every frame while the environment is
+   * rebuilt on a slow tick. A sky that updates in steps of a second reads as
+   * continuous, and the swap happens before the old texture is released
+   * because freeing one the renderer still holds flashes the scene.
+   */
+  advanceDayCycle(frameSeconds) {
+    if (this.dayClock === null) return;
+
+    const cycle = this.dayClock.advance(frameSeconds);
+    applyCycle(this.farm.lighting, this.scene, cycle);
+
+    this.secondsSinceEnvironmentRebuild += frameSeconds;
+    if (this.secondsSinceEnvironmentRebuild >= DAY_CYCLE_MOTION.environmentRebuildSeconds) {
+      this.secondsSinceEnvironmentRebuild = 0;
+      const replaced = this.movingEnvironment;
+      this.movingEnvironment = this.environments.build(cycle);
+      if (replaced !== null) replaced.dispose();
+    }
+
+    this.viewModel.applyCycle(cycle, this.movingEnvironment);
+    if (this.movingEnvironment !== null) {
+      this.scene.environment = this.movingEnvironment;
+    }
+  }
+
   render(frameSeconds) {
     this.elapsedRenderSeconds += frameSeconds;
     updateWind(this.elapsedRenderSeconds);
+    this.advanceDayCycle(frameSeconds);
     this.player.syncCamera();
     this.viewModel.update(frameSeconds, this.player);
     this.audio.setListener(this.player.position, this.player.yaw);
@@ -404,6 +439,9 @@ export class Game {
     this.canvas.removeEventListener('click', this.handleCanvasClick);
     window.removeEventListener('resize', this.handleResize);
     disposeSceneResources(this.scene);
+    // scene.environment is not in the graph, so the walk above never sees it.
+    if (this.movingEnvironment !== null) this.movingEnvironment.dispose();
+    this.environments.dispose();
     this.renderer.dispose();
   }
 }
