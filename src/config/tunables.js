@@ -519,28 +519,25 @@ export const DAY_CYCLES = {
 export const DEFAULT_DAY_CYCLE = 'evening';
 
 /**
- * Contact shading painted under everything that stands on the ground.
+ * Ambient occlusion, via three's GTAO post-processing pass.
  *
- * coveredHalfExtent only needs to reach as far as the player can get, which is
- * the fenced play area plus a margin; past that nothing is close enough to the
- * camera for the darkening to read. The texture is small because the signal is
- * a soft blur -- resolution buys nothing a gradient does not already give.
+ * radiusMetres is the one that matters and the one the default gets wrong for
+ * this scene: it is a world distance, and GTAO ships with 0.25, which on a
+ * farm of six-metre barns darkens nothing wider than a plank seam.
  *
- * The layer sits above the yard patches, which are themselves raised off the
- * ground, and draws after the opaque scene so it multiplies over what is
- * already there rather than being overdrawn by it.
+ * multisampling exists because routing through a composer bypasses the
+ * canvas-level antialias flag -- the scene lands in an offscreen target, so
+ * the target has to ask for samples itself.
  */
-export const GROUND_AMBIENT_OCCLUSION = {
-  textureSize: 1024,
-  coveredHalfExtent: 60,
-  minimumOccluderHeight: 0.3,
-  maximumSpreadMetres: 4,
-  spreadPerMetre: 0.55,
-  strengthPerMetre: 0.3,
-  maximumStrength: 0.55,
-  layerHeight: 0.05,
-  renderOrder: 1
+export const AMBIENT_OCCLUSION = {
+  radiusMetres: 4,
+  distanceExponent: 1,
+  thickness: 1,
+  scale: 3,
+  blendIntensity: 1,
+  multisampling: 4
 };
+
 
 /**
  * The moving day cycle, and the fog that rolls underneath it.

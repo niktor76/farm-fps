@@ -6,6 +6,10 @@ import { CollisionWorld } from './world/collision.js';
 import { buildFarm, updateWind } from './world/map.js';
 import { createSkyEnvironments } from './world/environment.js';
 import { DayCycleClock, isMovingCycle } from './world/dayCycle.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { applyCycle } from './world/lighting.js';
 import { generateSpawnPoints, chooseSpawnPoint } from './world/spawns.js';
 import { Player } from './entities/player.js';
@@ -22,7 +26,7 @@ import { EffectSystem } from './weapons/effects.js';
 import { ViewModel } from './weapons/viewmodel.js';
 import { PlantingSystem } from './world/planting.js';
 import { Balloon } from './world/balloon.js';
-import { CAMERA, MATCH, DAY_CYCLE_MOTION } from './config/tunables.js';
+import { CAMERA, MATCH, DAY_CYCLE_MOTION, AMBIENT_OCCLUSION } from './config/tunables.js';
 
 /**
  * One match: owns the scene, the fighters, the fixed-timestep loop, the match
@@ -165,6 +169,8 @@ export class Game {
       movementSpread: 0,
       scopeFraction: 0
     };
+
+    this.composer = this.createComposer();
 
     this.stats = new DebugStats();
     this.debugPanel = new DebugPanel(uiRoot, this);
@@ -387,6 +393,48 @@ export class Game {
   }
 
   /**
+   * Ambient occlusion, through three's own GTAO pass rather than anything
+   * hand-rolled. The world goes through the composer; the weapon does not,
+   * because it lives in its own scene drawn after a depth clear and has no
+   * business being occluded against the farm behind it.
+   *
+   * Routing through a composer means the canvas-level `antialias` flag stops
+   * applying -- it only covers the default framebuffer, and the scene now
+   * lands in an offscreen target first. The target asks for multisampling
+   * itself to get it back.
+   */
+  createComposer() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const target = new THREE.WebGLRenderTarget(width, height, {
+      samples: AMBIENT_OCCLUSION.multisampling,
+      type: THREE.HalfFloatType
+    });
+
+    const composer = new EffectComposer(this.renderer, target);
+    composer.addPass(new RenderPass(this.scene, this.camera));
+
+    const gtao = new GTAOPass(this.scene, this.camera, width, height);
+    // The default radius is a quarter of a metre, which is tuned for a desk
+    // ornament. A barn wall is six metres tall and needs to darken the ground
+    // well out from its base before any of this reads as occlusion.
+    gtao.updateGtaoMaterial({
+      radius: AMBIENT_OCCLUSION.radiusMetres,
+      distanceExponent: AMBIENT_OCCLUSION.distanceExponent,
+      thickness: AMBIENT_OCCLUSION.thickness,
+      scale: AMBIENT_OCCLUSION.scale,
+      screenSpaceRadius: false
+    });
+    gtao.blendIntensity = AMBIENT_OCCLUSION.blendIntensity;
+    composer.addPass(gtao);
+    this.gtaoPass = gtao;
+
+    composer.addPass(new OutputPass());
+    return composer;
+  }
+
+  /**
    * The sky itself is cheap to move, but its prefiltered reflection is not, so
    * the lights and fog follow the clock every frame while the environment is
    * rebuilt on a slow tick. A sky that updates in steps of a second reads as
@@ -447,7 +495,7 @@ export class Game {
 
     this.renderer.info.reset();
     this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
     this.renderer.clearDepth();
     this.viewModel.render(this.renderer);
     this.stats.sampleFrame(frameSeconds, this.renderer);
@@ -458,6 +506,7 @@ export class Game {
     const width = window.innerWidth;
     const height = window.innerHeight;
     this.renderer.setSize(width, height, false);
+    this.composer.setSize(width, height);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.viewModel.resize(width / height);
@@ -478,6 +527,7 @@ export class Game {
     // scene.environment is not in the graph, so the walk above never sees it.
     if (this.movingEnvironment !== null) this.movingEnvironment.dispose();
     this.environments.dispose();
+    this.composer.dispose();
     this.renderer.dispose();
   }
 }

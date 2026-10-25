@@ -23,7 +23,6 @@ import { WORLD, FIGHTER } from '../config/tunables.js';
 import { createMaterialLibrary, createTexturedBox, scaleUvs, mergeByMaterial } from './materials.js';
 import { createLighting } from './lighting.js';
 import { ConcealmentField } from './concealment.js';
-import { createGroundOcclusionTexture, createGroundOcclusionLayer } from './ambientOcclusion.js';
 import { createBarn, createGarage, createFarmhouse, createShed } from './buildings.js';
 import {
   createFence,
@@ -81,9 +80,6 @@ export function buildFarm({ scene, collisionWorld, random, dayCycleKey, environm
   const wheat = createWheatPatches(materials, collisionWorld, concealment, random);
   group.add(wheat.mesh);
   group.add(createOuterScenery(materials, random));
-
-  // After every structure, so the painted footprints cover the whole farm.
-  group.add(createGroundOcclusionLayer(createGroundOcclusionTexture(collisionWorld)));
 
   scene.add(group);
 
