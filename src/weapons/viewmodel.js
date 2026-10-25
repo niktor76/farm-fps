@@ -18,8 +18,9 @@
  */
 
 import * as THREE from 'three';
-import { DAY_CYCLES, OPTICS } from '../config/tunables.js';
+import { DAY_CYCLES, OPTICS, ENVIRONMENT } from '../config/tunables.js';
 import { mergeByMaterial } from '../world/materials.js';
+import { applyEnvironment } from '../world/environment.js';
 
 const TWO_PI = Math.PI * 2;
 const DEGREES_TO_HALF_RADIANS = Math.PI / 360;
@@ -158,8 +159,9 @@ export class ViewModel {
    * @param {ReturnType<import('../world/materials.js').createMaterialLibrary>} materials
    * @param {keyof typeof DAY_CYCLES} dayCycleKey
    */
-  constructor(camera, materials, dayCycleKey) {
+  constructor(camera, materials, dayCycleKey, environments = null) {
     this.camera = camera;
+    this.environments = environments;
 
     this.scene = new THREE.Scene();
     this.viewCamera = new THREE.PerspectiveCamera(
@@ -255,6 +257,10 @@ export class ViewModel {
     this.fillLight.color.setHex(cycle.skyLightColor);
     this.fillLight.groundColor.setHex(cycle.groundLightColor);
     this.fillLight.intensity = cycle.ambientIntensity;
+
+    if (this.environments !== null) {
+      applyEnvironment(this.scene, this.environments.get(dayCycleKey), ENVIRONMENT.viewIntensity);
+    }
   }
 
   setWeapon(weaponId) {

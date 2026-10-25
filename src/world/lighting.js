@@ -11,7 +11,8 @@
  */
 
 import * as THREE from 'three';
-import { WORLD, DAY_CYCLES, DEFAULT_DAY_CYCLE } from '../config/tunables.js';
+import { WORLD, DAY_CYCLES, DEFAULT_DAY_CYCLE, ENVIRONMENT } from '../config/tunables.js';
+import { applyEnvironment } from './environment.js';
 
 const SHADOW_NEAR = 10;
 const SHADOW_FAR = 170;
@@ -39,7 +40,7 @@ function sunPosition(elevationDegrees, azimuthDegrees) {
   );
 }
 
-export function createLighting(scene, dayCycleKey = DEFAULT_DAY_CYCLE) {
+export function createLighting(scene, dayCycleKey = DEFAULT_DAY_CYCLE, environments = null) {
   const cycle = DAY_CYCLES[dayCycleKey];
   if (!cycle) throw new Error(`unknown day cycle: ${dayCycleKey}`);
 
@@ -75,6 +76,10 @@ export function createLighting(scene, dayCycleKey = DEFAULT_DAY_CYCLE) {
 
   scene.add(sun);
   scene.add(sun.target);
+
+  if (environments !== null) {
+    applyEnvironment(scene, environments.get(dayCycleKey), ENVIRONMENT.worldIntensity);
+  }
 
   return { sun, hemisphere };
 }

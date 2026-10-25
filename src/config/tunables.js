@@ -519,6 +519,29 @@ export const DAY_CYCLES = {
 export const DEFAULT_DAY_CYCLE = 'evening';
 
 /**
+ * Image-based lighting. The source is tiny on purpose: it is a smooth gradient,
+ * so resolution buys nothing once PMREM has blurred it, and the prefiltering
+ * cost scales with it.
+ *
+ * The two intensities are calibrated, not arbitrary, and they differ by a lot.
+ * The world's sun and ambient were tuned before any environment existed, so an
+ * environment at full strength is extra light on top: measured at midday it
+ * raised the ground 20.8%. 0.15 is what keeps that under 5%, which is the
+ * budget for leaving the tuned look alone -- the cost is that world metals gain
+ * little, and lifting them would mean re-tuning every cycle's sun and ambient.
+ * The view model is a separate scene with its own camera and its own light
+ * scale, and nothing in it casts on the world, so it can carry a far stronger
+ * environment. That is what lifts the near-black gun metal.
+ */
+export const ENVIRONMENT = {
+  sourceWidth: 128,
+  sourceHeight: 64,
+  horizonSoftness: 0.08,
+  worldIntensity: 0.15,
+  viewIntensity: 3
+};
+
+/**
  * Rebindable actions. The order is the order the settings panel lists them in,
  * and the codes are KeyboardEvent.code values so the layout does not matter.
  */

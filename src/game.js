@@ -4,6 +4,7 @@ import { DebugStats } from './core/debugStats.js';
 import { Random } from './core/rng.js';
 import { CollisionWorld } from './world/collision.js';
 import { buildFarm, updateWind } from './world/map.js';
+import { createSkyEnvironments } from './world/environment.js';
 import { generateSpawnPoints, chooseSpawnPoint } from './world/spawns.js';
 import { Player } from './entities/player.js';
 import { Bot } from './entities/bot.js';
@@ -58,11 +59,13 @@ export class Game {
 
     this.random = new Random();
     this.collisionWorld = new CollisionWorld();
+    this.environments = createSkyEnvironments(this.renderer);
     this.farm = buildFarm({
       scene: this.scene,
       collisionWorld: this.collisionWorld,
       random: this.random,
-      dayCycleKey: settings.dayCycleKey
+      dayCycleKey: settings.dayCycleKey,
+      environments: this.environments
     });
     this.spawnPoints = generateSpawnPoints(this.collisionWorld, this.random);
     this.waypoints = WaypointGraph.build(this.collisionWorld, this.random, this.farm.coverPoints);
@@ -73,7 +76,12 @@ export class Game {
     this.scoreboard = new Scoreboard(uiRoot);
     this.scoreboardVisible = false;
     this.effects = new EffectSystem(this.scene, this.farm.materials);
-    this.viewModel = new ViewModel(this.camera, this.farm.materials, settings.dayCycleKey);
+    this.viewModel = new ViewModel(
+      this.camera,
+      this.farm.materials,
+      settings.dayCycleKey,
+      this.environments
+    );
 
     this.player = new Player({
       id: 0,

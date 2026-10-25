@@ -50,9 +50,9 @@ const SHEDS = [
   { position: [-25, -14], rotation: Math.PI / 2, size: [5, 3, 4.5] }
 ];
 
-export function buildFarm({ scene, collisionWorld, random, dayCycleKey }) {
+export function buildFarm({ scene, collisionWorld, random, dayCycleKey, environments }) {
   const materials = createMaterialLibrary();
-  const lighting = createLighting(scene, dayCycleKey);
+  const lighting = createLighting(scene, dayCycleKey, environments);
 
   const group = new THREE.Group();
   group.name = 'farm';
