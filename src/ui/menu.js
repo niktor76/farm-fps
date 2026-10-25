@@ -14,8 +14,7 @@ import {
   WEAPON_SLOT_KEY_CODES
 } from '../config/tunables.js';
 import { MOVING_CYCLE_KEY } from '../world/dayCycle.js';
-
-const STORAGE_KEY = 'farm-fps-settings';
+import { readStoredSettings, writeStoredSettings } from '../config/settingsStorage.js';
 
 function isValidDayCycle(dayCycleKey) {
   return Boolean(DAY_CYCLES[dayCycleKey]) || dayCycleKey === MOVING_CYCLE_KEY;
@@ -580,7 +579,7 @@ export class Menu {
   }
 
   persist() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+    writeStoredSettings(this.settings);
   }
 
   show() {
@@ -638,19 +637,6 @@ function sensitivityStep(device) {
 function storedNumber(value, fallback, minimum, maximum) {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function readStoredSettings() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return {};
-
-  let parsed;
-  try {
-    parsed = JSON.parse(stored);
-  } catch {
-    return {};
-  }
-  return typeof parsed === 'object' && parsed !== null ? parsed : {};
 }
 
 /** @returns {MatchSettings} */
