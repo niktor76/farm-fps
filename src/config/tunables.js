@@ -519,6 +519,28 @@ export const DAY_CYCLES = {
 export const DEFAULT_DAY_CYCLE = 'evening';
 
 /**
+ * Contact shading painted under everything that stands on the ground.
+ *
+ * coveredHalfExtent only needs to reach as far as the player can get, which is
+ * the fenced play area plus a margin; past that nothing is close enough to the
+ * camera for the darkening to read. The texture is small because the signal is
+ * a soft blur -- resolution buys nothing a gradient does not already give.
+ *
+ * aoMap touches indirect light only, so intensity trades against how much of
+ * the scene's light comes from the sky rather than the sun.
+ */
+export const GROUND_AMBIENT_OCCLUSION = {
+  textureSize: 1024,
+  coveredHalfExtent: 60,
+  minimumOccluderHeight: 0.3,
+  maximumSpreadMetres: 4,
+  spreadPerMetre: 0.55,
+  strengthPerMetre: 0.3,
+  maximumStrength: 0.85,
+  intensity: 1
+};
+
+/**
  * The moving day cycle, and the fog that rolls underneath it.
  *
  * fullDaySeconds is one match long on purpose: a cycle slower than a match
